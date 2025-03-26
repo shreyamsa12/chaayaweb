@@ -1,0 +1,550 @@
+:root {
+    --primary-color: #FF1493;
+    /* Brighter pink */
+    --secondary-color: #FFFFFF;
+    /* White for better contrast */
+    --accent-color: #FF69B4;
+    /* Light pink for hover */
+    --text-color: #FFFFFF;
+    /* White text */
+    --dark-bg: #1A1A1A;
+    /* Very dark gray, almost black */
+    --darker-bg: #121212;
+    /* Even darker for gradient */
+    --white: #FFFFFF;
+    --gray-light: #333333;
+    /* Darker gray for cards */
+    --neon-blue: #00f3ff;
+    /* Neon blue color */
+    --neon-glow: 0 0 7px #00f3ff, 0 0 10px #00f3ff, 0 0 21px #00f3ff;
+    /* Neon glow effect */
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    line-height: 1.6;
+    color: var(--text-color);
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+}
+
+/* Navbar Styles */
+.navbar {
+    background: transparent;
+    box-shadow: none;
+    position: fixed;
+    width: 100%;
+    top: 0;
+    z-index: 1000;
+}
+
+.navbar .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 70px;
+    padding: 0 2rem;
+}
+
+.logo {
+    height: 66px;
+    display: flex;
+    align-items: center;
+    padding: 12px 0 2.5px 0;
+    /* top right bottom left */
+}
+
+.logo img {
+    height: 100%;
+    width: auto;
+    object-fit: contain;
+    /* Optimize SVG rendering */
+    image-rendering: optimizeQuality;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    /* Make SVG white */
+    filter: brightness(0) invert(1);
+}
+
+.nav-menu {
+    display: flex;
+    list-style: none;
+    gap: 2rem;
+}
+
+.nav-menu a {
+    text-decoration: none;
+    color: var(--text-color);
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+.nav-menu a:hover {
+    color: var(--primary-color);
+}
+
+/* Hero Section */
+.hero {
+    padding: 120px 0 80px;
+    background: linear-gradient(rgba(255, 0, 102, 0.05), rgba(255, 77, 148, 0.08));
+    text-align: center;
+}
+
+.hero h1 {
+    font-size: 3rem;
+    margin-bottom: 1.5rem;
+    color: var(--text-color);
+}
+
+.hero .subheadline {
+    font-size: 1.25rem;
+    max-width: 800px;
+    margin: 0 auto 2rem;
+}
+
+/* Form Elements & Buttons Common Styles */
+.btn,
+.form-group input,
+.form-group button {
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+}
+
+/* Buttons */
+.btn {
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    color: inherit;
+}
+
+.btn.primary {
+    background: var(--primary-color);
+    color: var(--white);
+    transition: background-color 0.3s ease;
+}
+
+.btn.primary:hover {
+    background: var(--accent-color);
+}
+
+.btn.primary:disabled {
+    background: var(--gray-light);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.btn.secondary {
+    background: var(--white);
+    color: var(--gray-light);
+    /* Pink text on white background */
+    border: 2px solid var(--primary-color);
+    transition: all 0.3s ease;
+}
+
+.btn.secondary:hover {
+    color: var(--white);
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+}
+
+.btn.tertiary {
+    background: var(--gray-light);
+    color: var(--text-color);
+    transition: background-color 0.3s ease;
+}
+
+.btn.tertiary:hover {
+    background: var(--light-bg);
+}
+
+/* Highlights Section */
+.highlights {
+    padding: 80px 0;
+    background: var(--white);
+}
+
+.highlights .container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 2rem;
+}
+
+.highlight-card {
+    text-align: center;
+    padding: 2rem;
+    background: var(--gray-light);
+    border-radius: 0.5rem;
+    transition: transform 0.3s ease;
+}
+
+.highlight-card:hover {
+    transform: translateY(-5px);
+}
+
+.highlight-card i {
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+    transition: color 0.3s ease;
+}
+
+.highlight-card:hover i {
+    color: var(--accent-color);
+}
+
+.highlight-card:hover {
+    transform: translateY(-5px);
+}
+
+/* Coming Soon Styles */
+.coming-soon {
+    background: linear-gradient(135deg, var(--dark-bg) 0%, var(--darker-bg) 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.coming-soon-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+    text-align: center;
+}
+
+.coming-soon-content h1 {
+    font-size: 3.5rem;
+    margin-bottom: 3rem;
+    color: var(--white);
+    text-shadow: 0 0 10px rgba(0, 243, 255, 0.3);
+    animation: fadeInDown 1s ease-out;
+}
+
+.countdown {
+    display: flex;
+    gap: 2rem;
+    animation: fadeInUp 1s ease-out;
+}
+
+.countdown-item {
+    background: var(--gray-light);
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 0 15px rgba(0, 243, 255, 0.2);
+    min-width: 120px;
+    transition: transform 0.3s ease;
+}
+
+.countdown-item span {
+    display: block;
+    font-size: 3rem;
+    font-weight: bold;
+    color: var(--white);
+    margin-bottom: 0.5rem;
+    text-shadow: var(--neon-glow);
+    animation: neonPulse 1.5s infinite alternate;
+}
+
+.countdown-item label {
+    font-size: 1rem;
+    color: var(--white);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-shadow: 0 0 5px var(--neon-blue);
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes neonPulse {
+    from {
+        text-shadow: var(--neon-glow);
+    }
+
+    to {
+        text-shadow: 0 0 4px #00f3ff, 0 0 7px #00f3ff, 0 0 14px #00f3ff;
+    }
+}
+
+.countdown-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0 20px rgba(0, 243, 255, 0.3);
+}
+
+/* Event Page Styles */
+.event-page {
+    background: linear-gradient(135deg, var(--dark-bg) 0%, var(--darker-bg) 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.event-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    padding: 6rem 2rem 2rem;
+}
+
+.event-content h1 {
+    color: var(--white);
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.event-form {
+    max-width: 400px;
+    margin: 0 auto;
+    background: var(--gray-light);
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 0 15px rgba(0, 243, 255, 0.2);
+}
+
+/* Form Groups */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--white);
+}
+
+.form-group input {
+    background: var(--white);
+    color: var(--dark-bg);
+    /* iOS input styling fixes */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    border: 1px solid transparent;
+}
+
+.form-group input.error {
+    border: 2px solid #ff4444;
+    background-color: rgba(255, 68, 68, 0.1);
+}
+
+.form-group input.error::placeholder {
+    color: #ff4444;
+}
+
+/* Error message for individual fields */
+.form-group input.error+.field-error {
+    color: #ff4444;
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+    display: block;
+}
+
+.help-text {
+    color: var(--neon-blue);
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+    text-align: center;
+}
+
+#otpSection {
+    animation: fadeInDown 0.5s ease-out;
+}
+
+.event-form .btn {
+    width: 100%;
+    margin-top: 1rem;
+}
+
+.error-message {
+    color: #ff4444;
+    margin-top: 0.5rem;
+    text-align: center;
+    font-size: 0.875rem;
+}
+
+/* Success Page Styles */
+.success-message {
+    text-align: center;
+    padding: 2rem;
+    animation: fadeInUp 1s ease-out;
+}
+
+.success-message i {
+    font-size: 4rem;
+    color: var(--neon-blue);
+    margin-bottom: 1rem;
+    animation: neonPulse 1.5s infinite alternate;
+}
+
+.success-message h1 {
+    color: var(--white);
+    margin-bottom: 1rem;
+}
+
+.success-message p {
+    color: var(--white);
+    margin-bottom: 2rem;
+    opacity: 0.8;
+}
+
+.success-message .btn {
+    display: inline-block;
+    text-decoration: none;
+}
+
+/* Fix for iOS zoom on input focus */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+
+    select,
+    textarea,
+    input {
+        font-size: 16px;
+    }
+}
+
+/* Camera Styles */
+.camera-container {
+    text-align: center;
+    width: 100%;
+}
+
+.preview-container {
+    background: rgba(0, 0, 0, 0.1);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.preview-label {
+    color: var(--white);
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+#camera,
+#canvas {
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
+    border-radius: 0.5rem;
+}
+
+.selfie-preview {
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
+    border-radius: 0.5rem;
+    display: block;
+}
+
+.camera-container .btn {
+    margin: 0.5rem 0;
+    width: 100%;
+}
+
+.camera-container i {
+    margin-right: 0.5rem;
+}
+
+/* Android-specific styles */
+@supports (-webkit-appearance: none) {
+    .camera-container {
+        /* Prevent Android Chrome pull-to-refresh */
+        overscroll-behavior: contain;
+        position: relative;
+        z-index: 1;
+    }
+
+    #camera {
+        /* Fix for some Android browsers */
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+        object-fit: cover;
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+    }
+
+    /* Android error message styling */
+    .camera-container .error-message {
+        padding: 1rem;
+        text-align: center;
+        background: rgba(255, 68, 68, 0.1);
+        border-radius: 0.5rem;
+        margin-top: 1rem;
+    }
+
+    .camera-container .error-message i {
+        font-size: 2rem;
+        color: #ff4444;
+        margin-bottom: 0.5rem;
+    }
+
+    .camera-container .error-message ul {
+        text-align: left;
+        margin-top: 0.5rem;
+        padding-left: 1.5rem;
+        color: var(--white);
+    }
+
+    .camera-container .error-message ul li {
+        margin: 0.25rem 0;
+        font-size: 0.875rem;
+    }
+}
+
+/* Fix for Android keyboard pushing up content */
+@media screen and (max-height: 600px) {
+    .event-content {
+        padding-top: 1rem;
+    }
+}
+
+.app-install-message {
+    color: var(--neon-blue);
+    font-size: 1.1rem;
+    margin: 1.5rem 0;
+    padding: 1rem;
+    border: 1px solid var(--neon-blue);
+    border-radius: 0.5rem;
+    background: rgba(0, 243, 255, 0.1);
+}

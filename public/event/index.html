@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="google-signin-client_id" content="662675060225-xxxxxxxxxxxxxxxx.apps.googleusercontent.com">
+    <title>Chaaya.ai - Event Registration</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/responsive.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.0/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.0/firebase-storage.js"></script>
+</head>
+
+<body class="event-page">
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <img src="/assets/chaya_new.svg" alt="Chaaya.ai Logo" class="brand-logo">
+            </div>
+        </div>
+    </nav>
+
+    <div class="event-content">
+        <div class="container">
+            <h1>Event Registration</h1>
+            <form id="eventForm" class="event-form">
+                <div class="form-group">
+                    <label for="nameInput">Name</label>
+                    <input type="text" id="nameInput" name="name" required>
+                    <span class="field-error" style="display: none;">Please enter your name</span>
+                </div>
+                <div class="form-group">
+                    <label for="phoneInput">Phone Number</label>
+                    <input type="tel" id="phoneInput" name="phone" pattern="[0-9]{10}" placeholder="10 digit number"
+                        required>
+                    <span class="field-error" style="display: none;">Please enter a valid 10-digit phone number</span>
+                </div>
+                <div class="form-group">
+                    <label>Take a Selfie</label>
+                    <div class="camera-container">
+                        <video id="camera" autoplay playsinline style="display: none;"></video>
+                        <canvas id="canvas" style="display: none;"></canvas>
+                        <div class="preview-container" style="display: none;" id="previewContainer">
+                            <p class="preview-label">Preview:</p>
+                            <img id="selfiePreview" class="selfie-preview" alt="Selfie preview">
+                            <p class="help-text">Not happy with the photo?</p>
+                        </div>
+                        <button type="button" id="cameraBtn" class="btn primary">
+                            <i class="fas fa-camera"></i> Open Camera
+                        </button>
+                        <button type="button" id="captureBtn" class="btn primary" style="display: none;">
+                            <i class="fas fa-camera"></i> Take Photo
+                        </button>
+                        <button type="button" id="retakeBtn" class="btn primary" style="display: none;">
+                            <i class="fas fa-redo"></i> Take New Photo
+                        </button>
+                    </div>
+                </div>
+                <div id="otpSection" class="form-group" style="display: none;">
+                    <label for="otpInput">Enter OTP</label>
+                    <input type="text" id="otpInput" name="otp" pattern="[0-9]{6}" placeholder="6 digit OTP"
+                        maxlength="6">
+                    <p class="help-text">Please check your SMS for OTP</p>
+                </div>
+                <div id="errorMessage" class="error-message" style="display: none;"></div>
+                <button type="submit" id="submitBtn" class="btn primary">Send OTP</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAcOv9f-14NF_b15KExdQC1h8LUZa0tSpo",
+            authDomain: "photoshoto-a7226.firebaseapp.com",
+            projectId: "photoshoto-a7226",
+            storageBucket: "photoshoto-a7226.appspot.com",
+            messagingSenderId: "662675060225",
+            appId: "1:662675060225:web:71903d0e60c17cebc9f200",
+            measurementId: "G-XXXXXXXXXX"  // Add if you have Analytics enabled
+        };
+
+        // Initialize Firebase
+        let auth;  // Declare auth globally
+        try {
+            firebase.initializeApp(firebaseConfig);
+            auth = firebase.auth();
+            console.log('Firebase initialized successfully');
+            console.log('Auth methods available:', Object.keys(auth));
+        } catch (error) {
+            console.error('Firebase initialization failed:', error);
+        }
+
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+
+        // Test Firebase services
+        async function testFirebaseServices() {
+            try {
+                console.log('Testing Firebase services...');
+
+                // Test Auth
+                console.log('Auth initialized: ' + !!auth);
+
+                // Test Firestore
+                await db.collection('test').doc('test').set({ test: true });
+                debugLog('Firestore write successful');
+                await db.collection('test').doc('test').delete();
+
+                // Test Storage
+                const testRef = storage.ref().child('test.txt');
+                await testRef.putString('test');
+                debugLog('Storage write successful');
+                await testRef.delete();
+
+                debugLog('All Firebase services working!', true);
+            } catch (error) {
+                debugLog('Firebase services test failed: ' + error.message, true);
+            }
+        }
+
+        testFirebaseServices();
+
+        // Debug logging function for mobile
+        function debugLog(message, isError = false) {
+            if (isError) {
+                console.error(message);
+            } else {
+                console.log(message);
+            }
+        }
+
+        // Test Firebase connection
+        firebase.auth().onAuthStateChanged((user) => {
+            debugLog('Firebase Auth State: ' + (user ? 'Logged in' : 'Not logged in'));
+        });
+
+        // Camera handling
+        let stream = null;
+        let capturedImage = null;
+
+        // Check for camera support
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            debugLog('Camera API not supported in this browser', true);
+        }
+
+        document.getElementById('cameraBtn').addEventListener('click', async () => {
+            try {
+                debugLog('Opening camera...');
+                // Basic camera request
+                const constraints = {
+                    video: true,
+                    audio: false
+                };
+
+                debugLog('Requesting camera access...');
+                // Use the old getUserMedia API for better compatibility
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                } else {
+                    // Fallback for older browsers
+                    const getUserMedia = navigator.getUserMedia ||
+                        navigator.webkitGetUserMedia ||
+                        navigator.mozGetUserMedia ||
+                        navigator.msGetUserMedia;
+
+                    if (!getUserMedia) {
+                        throw new Error('Camera not supported in this browser');
+                    }
+
+                    stream = await new Promise((resolve, reject) => {
+                        getUserMedia.call(navigator, constraints, resolve, reject);
+                    });
+                }
+                debugLog('Camera access granted');
+
+                const video = document.getElementById('camera');
+                // Reset video element
+                if (video.srcObject) {
+                    video.srcObject.getTracks().forEach(track => track.stop());
+                }
+                video.srcObject = stream;
+
+                // Essential video attributes for mobile
+                video.setAttribute('playsinline', 'true');
+                video.setAttribute('autoplay', 'true');
+                video.setAttribute('muted', 'true');
+                video.muted = true; // Required for autoplay
+                video.style.display = 'block';
+
+                // Wait for video to be ready
+                video.addEventListener('loadedmetadata', () => {
+                    debugLog('Video ready to play');
+                    video.play().catch(e => debugLog('Video play error: ' + e.message, true));
+                });
+
+                document.getElementById('cameraBtn').style.display = 'none';
+                document.getElementById('captureBtn').style.display = 'inline-block';
+                debugLog('Camera ready');
+
+            } catch (err) {
+                debugLog('Camera access error: ' + err.message, true);
+                alert('Camera error: ' + err.message + '\nPlease make sure camera permissions are allowed and try again.');
+            }
+        });
+
+        document.getElementById('captureBtn').addEventListener('click', () => {
+            const video = document.getElementById('camera');
+            const canvas = document.getElementById('canvas');
+            const preview = document.getElementById('selfiePreview');
+
+            try {
+                // Set canvas size to video size
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                debugLog('Canvas size set to: ' + canvas.width + 'x' + canvas.height);
+
+                // Draw video frame to canvas
+                canvas.getContext('2d').drawImage(video, 0, 0);
+
+                // Convert to blob for upload
+                canvas.toBlob((blob) => {
+                    capturedImage = blob;
+                    debugLog('Image captured, size: ' + Math.round(blob.size / 1024) + 'KB');
+                    preview.src = URL.createObjectURL(blob);
+                }, 'image/jpeg', 0.8);
+
+                // Show preview and retake button
+                document.getElementById('previewContainer').style.display = 'block';
+                video.style.display = 'none';
+                document.getElementById('captureBtn').style.display = 'none';
+                document.getElementById('retakeBtn').style.display = 'inline-block';
+
+                // Stop camera stream
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    debugLog('Camera stream stopped');
+                }
+            } catch (captureError) {
+                debugLog('Error capturing image: ' + captureError.message, true);
+            }
+        });
+
+        document.getElementById('retakeBtn').addEventListener('click', () => {
+            document.getElementById('previewContainer').style.display = 'none';
+            document.getElementById('retakeBtn').style.display = 'none';
+            document.getElementById('cameraBtn').style.display = 'inline-block';
+            capturedImage = null;
+        });
+
+        // Create eventsregistry collection if it doesn't exist
+        async function initializeFirestore() {
+            try {
+                const initDoc = await db.collection('eventsregistry').doc('init').set({
+                    initialized: true,
+                    timestamp: new Date().toISOString()
+                });
+                console.log('Firestore initialized');
+            } catch (error) {
+                console.error('Error initializing Firestore:', error);
+                alert('Error initializing Firestore: ' + error.message);
+            }
+        }
+
+        // Call initialization
+        initializeFirestore();
+
+        // Initialize form elements
+        const otpInput = document.getElementById('otpInput');
+        const submitBtn = document.getElementById('submitBtn');
+
+        // Auto-submit when 6 digits are entered
+        otpInput.addEventListener('input', function (e) {
+            if (this.value.length === 6) {
+                console.log('6 digits entered, auto-submitting');
+                // Trigger form submission instead of button click
+                const form = document.getElementById('eventForm');
+                form.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // Only allow numbers
+        otpInput.addEventListener('keypress', function (e) {
+            if (!/[0-9]/.test(e.key)) {
+                e.preventDefault();
+            }
+        });
+
+        let isOtpSent = false;
+        let confirmationResult = null;
+
+        document.getElementById('eventForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            console.log('Form submitted');
+            const phone = document.getElementById('phoneInput').value;
+            const name = document.getElementById('nameInput').value;
+            const eventId = window.location.pathname.split('/')[2];
+            console.log('Current URL path:', window.location.pathname);
+            console.log('Extracted eventId:', eventId);
+
+            if (!isOtpSent) {
+                try {
+                    console.log('Send OTP button clicked');
+                    // Validate required fields
+                    if (!name.trim()) {
+                        console.error('Name is required');
+                        document.getElementById('nameInput').classList.add('error');
+                        return;
+                    }
+
+                    if (!phone.trim()) {
+                        console.error('Phone number is required');
+                        document.getElementById('phoneInput').classList.add('error');
+                        return;
+                    }
+
+                    if (!eventId) {
+                        console.error('Event ID is missing from URL');
+                        const errorMessage = document.getElementById('errorMessage');
+                        errorMessage.textContent = 'Invalid event URL. Please check the link and try again.';
+                        errorMessage.style.display = 'block';
+                        return;
+                    }
+
+                    // Remove error class if previously added
+                    document.getElementById('nameInput').classList.remove('error');
+                    document.getElementById('phoneInput').classList.remove('error');
+                    document.getElementById('errorMessage').style.display = 'none';
+
+                    document.getElementById('submitBtn').disabled = true;
+                    document.getElementById('submitBtn').textContent = 'Sending...';
+                    console.log('Starting OTP process...');
+
+                    // Make sure phone number is exactly 10 digits before adding country code
+                    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+                    const phoneNumber = '+91' + cleanPhone;
+                    console.log('Formatted phone number:', phoneNumber);
+
+                    // Clear any existing reCAPTCHA
+                    if (window.recaptchaVerifier) {
+                        console.log('Clearing existing reCAPTCHA');
+                        window.recaptchaVerifier.clear();
+                        window.recaptchaVerifier = null;
+                    }
+
+                    console.log('Setting up new reCAPTCHA...');
+                    // Set up reCAPTCHA verifier
+                    const submitButton = document.getElementById('submitBtn');
+                    console.log('Creating reCAPTCHA verifier for button:', submitButton);
+                    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier(submitButton, {
+                        'size': 'invisible',
+                        'isolated': true,
+                        'callback': (response) => {
+                            console.log('reCAPTCHA verification successful');
+                            console.log('reCAPTCHA token:', response);
+                        },
+                        'expired-callback': () => {
+                            console.log('reCAPTCHA expired');
+                            window.recaptchaVerifier.clear();
+                            window.recaptchaVerifier = null;
+                        }
+                    });
+
+                    try {
+                        console.log('Rendering reCAPTCHA...');
+                        await window.recaptchaVerifier.render();
+                        console.log('reCAPTCHA rendered successfully');
+
+                        // Log auth object state
+                        console.log('Auth object:', auth);
+                        console.log('Auth current user:', auth.currentUser);
+                        console.log('RecaptchaVerifier state:', window.recaptchaVerifier);
+
+                        // Verify domain is allowed
+                        const currentDomain = window.location.hostname;
+                        console.log('Current domain:', currentDomain);
+
+                        // Send OTP via SMS
+                        console.log('Calling Firebase signInWithPhoneNumber...');
+                        console.log('Phone number being sent:', phoneNumber);
+                        confirmationResult = await auth.signInWithPhoneNumber(phoneNumber, window.recaptchaVerifier);
+                        console.log('API call completed');
+                        console.log('Firebase response:', confirmationResult);
+
+                        if (confirmationResult && confirmationResult.verificationId) {
+                            console.log('OTP sent successfully. VerificationId:', confirmationResult.verificationId.substr(0, 5) + '...');
+                            // Show OTP section
+                            document.getElementById('otpSection').style.display = 'block';
+                            document.getElementById('submitBtn').textContent = 'Verify OTP';
+                            isOtpSent = true;
+                        } else {
+                            console.error('No verification ID received');
+                            throw new Error('No verification ID received from Firebase');
+                        }
+                    } catch (error) {
+                        console.error('Firebase error:', error);
+                        // Handle specific Identity Platform errors
+                        switch (error.code) {
+                            case 'auth/invalid-phone-number':
+                                errorMessage.textContent = 'Invalid phone number format. Please enter a valid number.';
+                                break;
+                            case 'auth/quota-exceeded':
+                                errorMessage.textContent = 'SMS quota exceeded. Please try again later.';
+                                break;
+                            case 'auth/operation-not-allowed':
+                                errorMessage.textContent = 'Phone authentication is not enabled. Please contact support.';
+                                break;
+                            default:
+                                errorMessage.textContent = error.message || 'Error sending OTP. Please try again.';
+                        }
+                        console.error('Error code:', error.code);
+                        console.error('Error message:', error.message);
+                        throw error;
+                    }
+
+                } catch (error) {
+                    debugLog('Failed to send OTP: ' + error.message, true);
+                    console.error('Complete error object:', error);
+                    const errorMessage = document.getElementById('errorMessage');
+                    errorMessage.textContent = error.message || 'Error sending OTP. Please try again.';
+                    errorMessage.style.display = 'block';
+                    // Reset reCAPTCHA on error
+                    if (window.recaptchaVerifier) {
+                        window.recaptchaVerifier.clear();
+                    }
+                    window.recaptchaVerifier = null;
+                } finally {
+                    document.getElementById('submitBtn').disabled = false;
+                    if (!isOtpSent) {
+                        document.getElementById('submitBtn').textContent = 'Send OTP';
+                    }
+                }
+
+            } else {
+                // Verify OTP
+                const enteredOtp = document.getElementById('otpInput').value;
+
+                if (!enteredOtp || enteredOtp.length !== 6) {
+                    console.error('Invalid OTP length');
+                    const errorMessage = document.getElementById('errorMessage');
+                    errorMessage.style.display = 'block';
+                    errorMessage.style.color = '#ff4444';
+                    errorMessage.textContent = 'Please enter a valid 6-digit OTP';
+                    return;
+                }
+
+                // Get form values again as they might be lost in the state
+                const name = document.getElementById('nameInput').value;
+                const phone = document.getElementById('phoneInput').value;
+                const eventId = window.location.pathname.split('/')[2];
+
+                console.log('Starting OTP verification with code:', enteredOtp);
+                console.log('Confirmation Result:', confirmationResult);
+                console.log('Form values for verification:', { name, phone, eventId });
+
+                if (!confirmationResult) {
+                    console.error('Error: confirmationResult is null');
+                    const errorMessage = document.getElementById('errorMessage');
+                    errorMessage.style.display = 'block';
+                    errorMessage.style.color = '#ff4444';
+                    errorMessage.textContent = 'Session expired. Please try sending OTP again.';
+                    // Reset form state
+                    document.getElementById('otpSection').style.display = 'none';
+                    document.getElementById('submitBtn').textContent = 'Send OTP';
+                    isOtpSent = false;
+                    return;
+                }
+
+                try {
+                    // Confirm the verification code
+                    console.log('Attempting to confirm OTP...');
+                    document.getElementById('submitBtn').disabled = true;
+                    document.getElementById('submitBtn').textContent = 'Verifying...';
+
+                    console.log('About to call confirmationResult.confirm with OTP:', enteredOtp);
+                    const result = await confirmationResult.confirm(enteredOtp);
+                    console.log('Confirm method called successfully');
+
+                    if (!result || !result.user) {
+                        console.error('No result or user returned from confirm');
+                        throw new Error('Verification failed - no user returned');
+                    }
+
+                    console.log('OTP confirmed successfully');
+                    console.log('Authentication result:', result);
+                    console.log('User UID:', result.user.uid);
+
+                    // Show immediate feedback
+                    const errorMessage = document.getElementById('errorMessage');
+                    errorMessage.style.display = 'block';
+                    errorMessage.style.color = '#00f3ff';
+                    errorMessage.textContent = 'OTP verified successfully! Saving registration...';
+
+                    const formData = {
+                        name: name,
+                        phone: phone,
+                        eventId: eventId,
+                        timestamp: new Date().toISOString(),
+                        verified: true,
+                        uid: result.user.uid
+                    };
+                    console.log('FormData prepared:', formData);
+
+                    // Save to Firestore
+                    try {
+                        console.log('Attempting to save to Firestore...');
+
+                        // Upload image if captured
+                        let imageUrl = null;
+                        if (capturedImage) {
+                            // Create a folder structure: selfie/eventId/userId.jpg
+                            const folderPath = `selfie/${eventId}`;
+                            const fileName = `${result.user.uid}.jpg`;
+                            const imageRef = storage.ref().child(`${folderPath}/${fileName}`);
+
+                            // Upload with metadata
+                            const metadata = {
+                                customMetadata: {
+                                    eventId: eventId,
+                                    userName: name,
+                                    phone: phone,
+                                    timestamp: new Date().toISOString()
+                                }
+                            };
+
+                            console.log('Uploading selfie...');
+                            await imageRef.put(capturedImage, metadata);
+                            imageUrl = await imageRef.getDownloadURL();
+                            console.log('Selfie uploaded successfully!');
+                        }
+
+                        await db.collection('eventsregistry')
+                            .doc(result.user.uid)
+                            .set({
+                                ...formData,
+                                selfieUrl: imageUrl
+                            });
+
+                        console.log('Registration saved successfully!');
+
+                        // Reset form and UI
+                        this.reset();
+                        document.getElementById('otpSection').style.display = 'none';
+                        document.getElementById('submitBtn').textContent = 'Send OTP';
+                        isOtpSent = false;
+
+                        // Navigate to success page after 2 seconds
+                        setTimeout(() => {
+                            window.location.href = `/success?event=${eventId}&name=${encodeURIComponent(name)}`;
+                        }, 2000);
+
+                    } catch (dbError) {
+                        console.error('Error saving to Firestore:', dbError);
+                        alert('Error: ' + dbError.message);
+                        const errorMessage = document.getElementById('errorMessage');
+                        errorMessage.style.display = 'block';
+                        errorMessage.style.color = '#ff4444';
+                        errorMessage.textContent = 'Error saving registration. Please try again or contact support.';
+                    }
+
+                } catch (error) {
+                    console.error('Error verifying OTP:', error);
+                    console.error('Error code:', error.code);
+                    console.error('Error message:', error.message);
+
+                    const errorMessage = document.getElementById('errorMessage');
+                    errorMessage.style.display = 'block';
+                    errorMessage.style.color = '#ff4444';  // Red for error
+
+                    // Handle specific OTP verification errors
+                    switch (error.code) {
+                        case 'auth/invalid-verification-code':
+                            errorMessage.textContent = 'Invalid OTP. Please check and try again.';
+                            break;
+                        case 'auth/code-expired':
+                            errorMessage.textContent = 'OTP has expired. Please request a new one.';
+                            break;
+                        default:
+                            errorMessage.textContent = error.message || 'Error verifying OTP. Please try again.';
+                    }
+
+                    // Clear OTP field for retry
+                    document.getElementById('otpInput').value = '';
+                    console.log('Form reset for retry');
+                    // Re-enable submit button
+                    document.getElementById('submitBtn').disabled = false;
+                    document.getElementById('submitBtn').textContent = 'Verify OTP';
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

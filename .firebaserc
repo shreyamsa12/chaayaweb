@@ -1,0 +1,9 @@
+{
+  "projects": {
+    "default": "photoshoto-a7226",
+    "staging": "photoshoto-a7226",
+    "st": "photoshoto-a7226"
+  },
+  "targets": {},
+  "etags": {}
+}

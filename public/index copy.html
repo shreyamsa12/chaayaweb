@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><span class="brand-name">Photoshooto</span> - Your Event Photography Solution</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/responsive.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics-compat.js"></script>
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <img src="/assets/photoshoto_logo.png" alt="Brand Logo" class="brand-logo">
+            </div>
+            <div class="nav-toggle">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#pricing">Pricing</a></li>
+                <li><a href="#contact">Contact</a></li>
+                <li>
+                    <button class="btn primary" onclick="window.location.href='/app'">Launch App</button>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="container">
+            <h1>Your Event Photography Solution – Simplified and Smart</h1>
+            <p class="subheadline"><span class="brand-name">Photoshooto</span> bridges the gap between event organizers,
+                photographers, and participants with AI-enabled photo sharing and an all-in-one marketplace for
+                photography services.</p>
+            <div class="cta-buttons">
+                <button class="btn primary">For Photographers</button>
+                <button class="btn secondary">For Event Hosts</button>
+                <button class="btn tertiary">For Participants</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Highlights -->
+    <section class="highlights">
+        <div class="container">
+            <div class="highlight-card">
+                <i class="fas fa-share-alt"></i>
+                <h3>Instant Photo Sharing</h3>
+                <p>AI-powered photo sharing for quick and easy distribution</p>
+            </div>
+            <div class="highlight-card">
+                <i class="fas fa-camera"></i>
+                <h3>Professional Services</h3>
+                <p>Find or offer professional photography services with ease</p>
+            </div>
+            <div class="highlight-card">
+                <i class="fas fa-wallet"></i>
+                <h3>Affordable Solutions</h3>
+                <p>Tailored pricing for every event and need</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="about">
+        <div class="container">
+            <h2>About <span class="brand-name">Photoshooto</span></h2>
+            <div class="about-content">
+                <div class="who-we-are">
+                    <h3>Who We Are</h3>
+                    <p><span class="brand-name">Photoshooto</span> is a cutting-edge platform designed to revolutionize
+                        the event photography ecosystem. Whether you're an event organizer, a professional photographer,
+                        or a participant, we streamline everything—from hiring the right talent to sharing cherished
+                        moments effortlessly.</p>
+                </div>
+                <div class="mission-vision">
+                    <div class="mission">
+                        <h3>Our Mission</h3>
+                        <p>"To make event photography smarter, faster, and more accessible for everyone."</p>
+                    </div>
+                    <div class="vision">
+                        <h3>Our Vision</h3>
+                        <p>"To empower photographers, connect communities, and preserve memories with AI-driven
+                            innovation."</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <h2>Our Features</h2>
+
+            <div class="feature-card">
+                <h3>1. AI-Enabled Photo Sharing</h3>
+                <div class="feature-content">
+                    <div class="for-hosts">
+                        <h4>For Event Hosts:</h4>
+                        <ul>
+                            <li>Upload photos taken during the event securely</li>
+                            <li>Our AI system identifies participants and matches their photos automatically</li>
+                            <li>Share photos directly with participants with just one click</li>
+                        </ul>
+                    </div>
+                    <div class="for-participants">
+                        <h4>For Participants:</h4>
+                        <ul>
+                            <li>Scan the event QR code and take a quick selfie</li>
+                            <li>Receive all your event photos instantly without hassle</li>
+                            <li>Relive your memories through the app anytime</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <h3>2. Comprehensive Marketplace</h3>
+                <div class="feature-content">
+                    <div class="for-agencies">
+                        <h4>For Photography Agencies:</h4>
+                        <ul>
+                            <li>Hire photographers, videographers, and assisting staff</li>
+                            <li>Rent high-end equipment like cameras, drones, and lighting gear</li>
+                            <li>Buy or sell used equipment and accessories to reduce costs</li>
+                        </ul>
+                    </div>
+                    <div class="for-freelancers">
+                        <h4>For Freelance Photographers:</h4>
+                        <ul>
+                            <li>Showcase your portfolio to potential clients</li>
+                            <li>Access a steady stream of job opportunities</li>
+                            <li>Build connections with agencies and event organizers</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Why Choose Us Section -->
+    <section class="why-choose-us">
+        <div class="container">
+            <h2>Why Choose Photoshooto?</h2>
+            <div class="benefits-grid">
+                <div class="benefit-card">
+                    <h3>Ease of Use</h3>
+                    <ul>
+                        <li>Intuitive platform designed for everyone</li>
+                        <li>Fast onboarding and real-time updates</li>
+                    </ul>
+                </div>
+                <div class="benefit-card">
+                    <h3>Innovative AI Technology</h3>
+                    <ul>
+                        <li>Face-recognition software ensures precise photo matching</li>
+                        <li>Save time and effort for all users</li>
+                    </ul>
+                </div>
+                <div class="benefit-card">
+                    <h3>Empowering Photographers</h3>
+                    <ul>
+                        <li>Access to jobs and equipment marketplace</li>
+                        <li>Flexible opportunities on your terms</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="how-it-works">
+        <div class="container">
+            <h2>How It Works</h2>
+            <div class="process-grid">
+                <div class="process-card">
+                    <h3>For Event Organizers</h3>
+                    <ol>
+                        <li>Sign up on Photoshooto and create an event</li>
+                        <li>Upload the event photos to our secure platform</li>
+                        <li>Share the event QR code with participants</li>
+                    </ol>
+                </div>
+                <div class="process-card">
+                    <h3>For Participants</h3>
+                    <ol>
+                        <li>Download the Photoshooto app</li>
+                        <li>Scan the event's QR code at the venue</li>
+                        <li>Take a selfie and let AI match your photos</li>
+                    </ol>
+                </div>
+                <div class="process-card">
+                    <h3>For Photographers</h3>
+                    <ol>
+                        <li>Create a profile and upload your portfolio</li>
+                        <li>Browse job opportunities or rent/sell equipment</li>
+                        <li>Get hired by agencies or directly by clients</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials Section -->
+    <section class="testimonials">
+        <div class="container">
+            <h2>What People Say About Us</h2>
+            <div class="testimonial-grid">
+                <div class="testimonial-card">
+                    <div class="quote">"Photoshooto transformed how we handle photos at our events. Sharing them with
+                        attendees is now effortless!"</div>
+                    <div class="author">- Event Organizer</div>
+                </div>
+                <div class="testimonial-card">
+                    <div class="quote">"As a freelancer, I found so many clients and projects through Photoshooto's
+                        marketplace. It's a game-changer!"</div>
+                    <div class="author">- Photographer</div>
+                </div>
+                <div class="testimonial-card">
+                    <div class="quote">"I loved how easy it was to get my event photos. No chasing photographers or
+                        waiting for weeks anymore!"</div>
+                    <div class="author">- Participant</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="pricing">
+        <div class="container">
+            <h2>Transparent Pricing</h2>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <h3>For Participants</h3>
+                    <div class="price">₹1<span>/photo</span></div>
+                    <ul>
+                        <li>High-resolution images</li>
+                        <li>Direct delivery to app</li>
+                        <li>Instant access</li>
+                    </ul>
+                </div>
+                <div class="pricing-card">
+                    <h3>For Agencies</h3>
+                    <div class="price">₹300<span>/year</span></div>
+                    <ul>
+                        <li>Full marketplace access</li>
+                        <li>Unlimited job postings</li>
+                        <li>Equipment rental listings</li>
+                    </ul>
+                </div>
+                <div class="pricing-card">
+                    <h3>For Freelancers</h3>
+                    <div class="price">Free<span> to join</span></div>
+                    <ul>
+                        <li>Portfolio showcase</li>
+                        <li>Job access</li>
+                        <li>Small commission on matches</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="contact">
+        <div class="container">
+            <h2>Have Questions or Ready to Join?</h2>
+            <div class="contact-content">
+                <form class="contact-form">
+                    <div class="form-group">
+                        <label for="name">Name</label>
+                        <input type="text" id="name" name="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="message">Message</label>
+                        <textarea id="message" name="message" required></textarea>
+                    </div>
+                    <button type="submit" class="btn primary">Send Message</button>
+                </form>
+                <div class="contact-info">
+                    <h3>Alternatively, Reach Us At:</h3>
+                    <p><i class="fas fa-envelope"></i> support@photoshooto.com</p>
+                    <p><i class="fas fa-phone"></i> +91-XXXXXXXXXX</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-links">
+                <a href="#about">About Us</a>
+                <a href="#">Terms of Service</a>
+                <a href="#">Privacy Policy</a>
+            </div>
+            <div class="copyright">
+                © 2025 <span class="brand-name">Photoshooto</span>. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+    <!-- Firebase Configuration -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAcOv9f-14NF_b15KExdQC1h8LUZa0tSpo",
+            authDomain: "photoshoto-a7226.firebaseapp.com",
+            projectId: "photoshoto-a7226",
+            storageBucket: "photoshoto-a7226.appspot.com",
+            messagingSenderId: "actual-sender-id",
+            appId: "1:662675060225:web:71903d0e60c17cebc9f200",
+            measurementId: "actual-measurement-id"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        firebase.analytics();
+    </script>
+
+    <script src="/js/main.js"></script>
+</body>
+
+</html>
