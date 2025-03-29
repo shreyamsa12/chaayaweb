@@ -236,37 +236,25 @@ body {
     animation: fadeInDown 1s ease-out;
 }
 
-.countdown {
-    display: flex;
-    gap: 2rem;
+.live-message {
+    text-align: center;
     animation: fadeInUp 1s ease-out;
+    margin-top: 2rem;
 }
 
-.countdown-item {
-    background: var(--gray-light);
-    padding: 2rem;
-    border-radius: 1rem;
-    box-shadow: 0 0 15px rgba(0, 243, 255, 0.2);
-    min-width: 120px;
-    transition: transform 0.3s ease;
-}
-
-.countdown-item span {
-    display: block;
-    font-size: 3rem;
-    font-weight: bold;
-    color: var(--white);
-    margin-bottom: 0.5rem;
+.live-message p {
+    font-size: 1.5rem;
+    color: var(--neon-blue);
+    margin-bottom: 2rem;
     text-shadow: var(--neon-glow);
     animation: neonPulse 1.5s infinite alternate;
 }
 
-.countdown-item label {
-    font-size: 1rem;
-    color: var(--white);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    text-shadow: 0 0 5px var(--neon-blue);
+.live-message .btn {
+    font-size: 1.25rem;
+    padding: 1rem 2rem;
+    display: inline-block;
+    text-decoration: none;
 }
 
 @keyframes fadeInDown {
