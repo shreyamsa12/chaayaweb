@@ -1,0 +1,264 @@
+// =========================================================
+// * Corporate UI Dashboard - v1.0.0
+// =========================================================
+//
+// * Product Page: https://www.creative-tim.com/product/corporate-ui-dashboard
+// * Copyright 2022 Creative Tim (https://www.creative-tim.com)
+//
+// Coded by www.creative-tim.com
+//
+// =========================================================
+//
+// * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+// Import Bootstrap functions first
+@import "bootstrap/scss/functions";
+
+// Custom Variables
+$primary: #5e72e4;
+$success: #2dce89;
+$info: #11cdef;
+$warning: #fb6340;
+$danger: #f5365c;
+
+// Import Bootstrap core
+@import "bootstrap/scss/variables";
+@import "bootstrap/scss/variables-dark";
+@import "bootstrap/scss/maps";
+@import "bootstrap/scss/mixins";
+@import "bootstrap/scss/utilities";
+
+// Custom Variables
+@import "corporate-ui-dashboard/custom/variables";
+
+// Theme Variables
+@import "corporate-ui-dashboard/variables";
+
+// Theme Core
+@import "corporate-ui-dashboard/theme";
+
+// Custom Variables
+@import "corporate-ui-dashboard/custom/styles";
+
+// Custom Gradients
+.bg-gradient-primary {
+    background-image: linear-gradient(310deg, #5e72e4 0%, #825ee4 100%);
+}
+
+.bg-gradient-success {
+    background-image: linear-gradient(310deg, #2dce89 0%, #2dcecc 100%);
+}
+
+.bg-gradient-danger {
+    background-image: linear-gradient(310deg, #f5365c 0%, #f56036 100%);
+}
+
+.bg-gradient-warning {
+    background-image: linear-gradient(310deg, #fb6340 0%, #fbb140 100%);
+}
+
+// Card Styles
+.card {
+    box-shadow: 0 20px 27px 0 rgb(0 0 0 / 5%);
+
+    .card-body {
+        padding: 1.5rem;
+    }
+}
+
+// Icon Styles
+.icon-shape {
+    width: 48px;
+    height: 48px;
+    background-position: center;
+    border-radius: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+
+    svg {
+        height: 24px;
+        width: 24px;
+    }
+}
+
+// Text Styles
+.text-sm {
+    font-size: 0.875rem !important;
+    line-height: 1.5;
+}
+
+.font-weight-bolder {
+    font-weight: 700 !important;
+}
+
+// Chart Container
+.chart {
+    height: 300px;
+}
+
+// Border Radius
+.border-radius-md {
+    border-radius: 0.75rem;
+}
+
+// Shadows
+.shadow-card {
+    box-shadow: 0 20px 27px 0 rgb(0 0 0 / 5%);
+}
+
+// Layout
+.g-sidenav-show {
+    .main-content {
+        margin-left: 17.125rem;
+        border-radius: 0.75rem;
+        transition: 0.3s ease;
+    }
+}
+
+// Sidebar styles
+.sidenav {
+    z-index: 1040;
+    transition: all 0.3s ease;
+
+    @media (max-width: 992px) {
+        transform: translateX(-100%);
+
+        &.show {
+            transform: translateX(0);
+        }
+    }
+
+    .navbar-brand {
+        padding: 1rem;
+
+        img {
+            height: 2rem;
+        }
+    }
+
+    .nav-link {
+        padding: 0.675rem 1rem;
+        color: #344767;
+        font-weight: 500;
+
+        &.active {
+            background: linear-gradient(310deg, #5e72e4 0%, #825ee4 100%);
+            color: white;
+            border-radius: 0.5rem;
+
+            .icon {
+                background: transparent !important;
+            }
+        }
+
+        .icon {
+            width: 32px;
+            height: 32px;
+            background: white;
+            box-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.14);
+            border-radius: 0.5rem;
+        }
+    }
+}
+
+// Mobile toggle button
+.mobile-nav-toggle {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    z-index: 1050;
+    display: none;
+
+    @media (max-width: 992px) {
+        display: block;
+    }
+}
+
+// Avatar styles
+.avatar {
+    &.avatar-xl {
+        width: 74px;
+        height: 74px;
+    }
+
+    img {
+        width: 100%;
+        border-radius: 50%;
+    }
+}
+
+// Card blog styles
+.card-blog {
+    .card-body {
+        position: relative;
+    }
+}
+
+// Border radius utilities
+.border-radius-xl {
+    border-radius: 1rem;
+}
+
+// Text gradient
+.text-gradient.text-dark {
+    background-image: linear-gradient(310deg, #141727 0%, #3A416F 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+// Blur effect
+.blur {
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+}
+
+// Add these responsive utilities
+@media (max-width: 768px) {
+    .g-sidenav-show {
+        .main-content {
+            margin-left: 0;
+        }
+    }
+
+    .sidenav {
+        transform: translateX(-100%);
+
+        &.show {
+            transform: translateX(0);
+        }
+    }
+
+    .card-body {
+        padding: 1rem;
+    }
+
+    .table-responsive {
+        .table {
+            min-width: 800px;
+        }
+    }
+}
+
+// Improve table responsiveness
+.table {
+
+    th,
+    td {
+        white-space: nowrap;
+    }
+}
+
+// Add animation utilities
+.transition-all {
+    transition: all 0.3s ease;
+}
+
+// Improve form controls
+.form-control {
+    &:focus {
+        border-color: $primary;
+        box-shadow: 0 0 0 0.2rem rgba($primary, 0.25);
+    }
+}
