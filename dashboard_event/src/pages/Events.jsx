@@ -365,21 +365,37 @@ export default function Events() {
     };
 
     const handleViewEvent = (event) => {
-        const eventLocation = {
-            lat: event.event_location.latitude,
-            lng: event.event_location.longitude
-        };
+        try {
+            // Safely convert Firestore timestamps to Date objects
+            const eventDate = event.date?.toDate ? event.date.toDate() : new Date(event.date);
+            const startTime = event.start_time?.toDate ? event.start_time.toDate() : new Date(event.start_time);
+            const endTime = event.end_time?.toDate ? event.end_time.toDate() : new Date(event.end_time);
 
-        setIsViewing(true);
-        setCurrentEventId(event.id);
-        setFormData({
-            ...event,
-            date: event.date.toDate(),
-            start_time: event.start_time.toDate(),
-            end_time: event.end_time.toDate(),
-            event_location: eventLocation
-        });
-        setShowModal(true);
+            const eventLocation = {
+                lat: event.event_location.latitude,
+                lng: event.event_location.longitude
+            };
+
+            setIsViewing(true);
+            setCurrentEventId(event.id);
+            setFormData({
+                ...event,
+                date: eventDate,
+                start_time: startTime,
+                end_time: endTime,
+                event_location: eventLocation
+            });
+            setShowModal(true);
+
+            console.log('Event data being set:', {
+                date: eventDate,
+                start_time: startTime,
+                end_time: endTime
+            });
+        } catch (error) {
+            console.error('Error in handleViewEvent:', error);
+            // Handle the error appropriately
+        }
     };
 
     const validateForm = () => {
@@ -610,25 +626,27 @@ export default function Events() {
                                             ))}
                                         </div>
                                     </td>
-                                    <td onClick={(e) => e.stopPropagation()}>
-                                        <button
-                                            className="btn btn-sm btn-outline-primary me-2"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleEditEvent(event);
-                                            }}
-                                        >
-                                            <HiPencil />
-                                        </button>
-                                        <button
-                                            className="btn btn-sm btn-outline-danger"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDeleteEvent(event.id);
-                                            }}
-                                        >
-                                            <HiTrash />
-                                        </button>
+                                    <td className="actions-cell">
+                                        <div className="d-flex">
+                                            <button
+                                                className="btn btn-icon"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleEditEvent(event);
+                                                }}
+                                            >
+                                                <HiPencil />
+                                            </button>
+                                            <button
+                                                className="btn btn-icon text-danger ms-3"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDeleteEvent(event.id);
+                                                }}
+                                            >
+                                                <HiTrash />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -673,7 +691,7 @@ export default function Events() {
                                                 <div className="d-flex flex-column align-items-center mb-3">
                                                     <div className="qr-code mb-3">
                                                         <QRCodeSVG
-                                                            value={`chaaya.ai/event/${currentEventId}`}
+                                                            value={`https://chaaya.ai/event/${currentEventId}`}
                                                             size={200}
                                                             level="H"
                                                             includeMargin={true}
@@ -693,7 +711,7 @@ export default function Events() {
                                                     </button>
                                                 </div>
                                                 <small className="text-muted">
-                                                    Scan to access event page: chaaya.ai/event/{currentEventId}
+                                                    Scan to access event page: {`https://chaaya.ai/event/${currentEventId}`}
                                                 </small>
                                             </div>
 
@@ -743,15 +761,14 @@ export default function Events() {
                                             <div className="row mb-4">
                                                 <div className="col-md-4">
                                                     <h6 className="text-muted">Date</h6>
-                                                    <p>{format(formData.date, 'dd/MM/yyyy')}</p>
+                                                    <p>{formData.date ? new Date(formData.date).toLocaleDateString() : 'N/A'}</p>
                                                 </div>
                                                 <div className="col-md-4">
-                                                    <h6 className="text-muted">Start Time</h6>
-                                                    <p>{format(formData.start_time, 'hh:mm aa')}</p>
-                                                </div>
-                                                <div className="col-md-4">
-                                                    <h6 className="text-muted">End Time</h6>
-                                                    <p>{format(formData.end_time, 'hh:mm aa')}</p>
+                                                    <h6 className="text-muted">Time</h6>
+                                                    <p>
+                                                        {formData.start_time ? new Date(formData.start_time).toLocaleTimeString() : 'N/A'} -
+                                                        {formData.end_time ? new Date(formData.end_time).toLocaleTimeString() : 'N/A'}
+                                                    </p>
                                                 </div>
                                             </div>
 

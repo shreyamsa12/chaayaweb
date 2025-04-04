@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { collection, getDoc, doc } from 'firebase/firestore';
 import { db, storage } from '../config/firebase';
-import { ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
+import { ref, uploadBytes, uploadBytesResumable, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 import { HiFolder, HiUpload, HiPhotograph, HiVideoCamera, HiX, HiChevronLeft, HiChevronRight, HiZoomIn, HiZoomOut } from 'react-icons/hi';
 import imageCompression from 'browser-image-compression';
 
@@ -21,6 +21,7 @@ export default function FolderView() {
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [selectMode, setSelectMode] = useState(false);
     const [loadingMedia, setLoadingMedia] = useState(true);
+    const [uploadProgress, setUploadProgress] = useState({});
 
     const thumbnailOptions = {
         maxSizeMB: 0.1,
@@ -160,48 +161,71 @@ export default function FolderView() {
                 const timestamp = Date.now();
                 const fileName = `${timestamp}_${file.name}`;
                 const filePath = `${basePath}/${type}/${fileName}`;
-                console.log('Uploading file:', filePath);
+
+                // Initialize progress for this file
+                setUploadProgress(prev => ({
+                    ...prev,
+                    [fileName]: 0
+                }));
 
                 try {
                     const storageRef = ref(storage, filePath);
-                    console.log('Storage reference created for path:', filePath);
-                    console.log('Event host:', event.event_host);
-                    console.log('Event name:', event.event_name);
 
-                    const snapshot = await uploadBytes(storageRef, file);
-                    console.log('File uploaded:', snapshot);
+                    // Create upload task
+                    const uploadTask = uploadBytesResumable(storageRef, file);
 
-                    const downloadURL = await getDownloadURL(snapshot.ref);
-                    console.log('Download URL obtained:', downloadURL);
+                    // Monitor upload progress
+                    uploadTask.on('state_changed',
+                        (snapshot) => {
+                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                            setUploadProgress(prev => ({
+                                ...prev,
+                                [fileName]: progress
+                            }));
+                        },
+                        (error) => {
+                            console.error(`Error uploading ${fileName}:`, error);
+                        },
+                        async () => {
+                            // Upload completed
+                            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
 
-                    let thumbnailUrl = null;
-                    if (type === 'photos') {
-                        const thumbnail = await createThumbnail(file);
-                        if (thumbnail) {
-                            const thumbnailPath = `${basePath}/thumbnails/${fileName}`;
-                            const thumbnailRef = ref(storage, thumbnailPath);
-                            await uploadBytes(thumbnailRef, thumbnail);
-                            thumbnailUrl = await getDownloadURL(thumbnailRef);
+                            let thumbnailUrl = null;
+                            if (type === 'photos') {
+                                const thumbnail = await createThumbnail(file);
+                                if (thumbnail) {
+                                    const thumbnailPath = `${basePath}/thumbnails/${fileName}`;
+                                    const thumbnailRef = ref(storage, thumbnailPath);
+                                    await uploadBytes(thumbnailRef, thumbnail);
+                                    thumbnailUrl = await getDownloadURL(thumbnailRef);
+                                }
+                            }
+
+                            const uploadedFile = {
+                                name: fileName,
+                                url: downloadURL,
+                                type: type,
+                                path: filePath,
+                                thumbnailUrl: thumbnailUrl || downloadURL,
+                                uploadedAt: timestamp
+                            };
+
+                            uploadedFiles.push(uploadedFile);
+                            setUploadedFiles(prev => [...prev, uploadedFile]);
+
+                            // Clear progress when complete
+                            setUploadProgress(prev => {
+                                const newProgress = { ...prev };
+                                delete newProgress[fileName];
+                                return newProgress;
+                            });
                         }
-                    }
-
-                    const uploadedFile = {
-                        name: fileName,
-                        url: downloadURL,
-                        type: type,
-                        path: filePath,
-                        thumbnailUrl: thumbnailUrl || downloadURL,
-                        uploadedAt: timestamp
-                    };
-
-                    uploadedFiles.push(uploadedFile);
+                    );
                 } catch (error) {
                     console.error(`Error uploading ${fileName}:`, error);
                     console.error('Error details:', error.message);
                 }
             }
-
-            setUploadedFiles(prev => [...prev, ...uploadedFiles]);
         } catch (error) {
             console.error('Upload error:', error);
             console.error('Error details:', error.message);
@@ -527,6 +551,25 @@ export default function FolderView() {
                                     </div>
                                 </div>
                             </div>
+                            {/* Add progress display */}
+                            {Object.entries(uploadProgress).map(([fileName, progress]) => (
+                                <div key={fileName} className="mt-3">
+                                    <div className="d-flex justify-content-between mb-1">
+                                        <small>{fileName}</small>
+                                        <small>{Math.round(progress)}%</small>
+                                    </div>
+                                    <div className="progress">
+                                        <div
+                                            className="progress-bar"
+                                            role="progressbar"
+                                            style={{ width: `${progress}%` }}
+                                            aria-valuenow={progress}
+                                            aria-valuemin="0"
+                                            aria-valuemax="100"
+                                        />
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>

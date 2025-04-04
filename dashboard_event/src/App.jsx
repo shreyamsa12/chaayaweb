@@ -10,6 +10,7 @@ import Analytics from './pages/Analytics';
 import Folders from './pages/Folders';
 import FolderView from './pages/FolderView';
 import { GoogleMapsProvider } from './contexts/GoogleMapsContext';
+import Attendees from './pages/Attendees';
 
 // Import the SCSS instead of CSS
 import './assets/scss/main.scss';
@@ -30,6 +31,7 @@ function App() {
                                 <Route index element={<Dashboard />} />
                                 <Route path="events" element={<Events />} />
                                 <Route path="analytics" element={<Analytics />} />
+                                <Route path="attendees" element={<Attendees />} />
                                 <Route path="folders" element={<Folders />} />
                                 <Route path="folders/:eventId/:folderName" element={<FolderView />} />
                             </Route>

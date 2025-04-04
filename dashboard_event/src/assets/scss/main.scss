@@ -683,6 +683,35 @@ body {
             }
         }
     }
+
+    .sidebar {
+        .sidebar-logo {
+            border-bottom-color: rgba(255, 255, 255, 0.1);
+        }
+    }
+
+    .card-header {
+        background-color: var(--bg-secondary);
+        border-bottom-color: var(--border-color);
+
+        h5 {
+            color: var(--text-primary);
+        }
+
+        small.text-muted {
+            color: var(--text-secondary) !important;
+        }
+    }
+
+    // Also ensure the card itself has proper colors
+    .card {
+        background-color: var(--card-bg);
+        border-color: var(--border-color);
+
+        .card-header {
+            border-bottom-color: var(--border-color);
+        }
+    }
 }
 
 // Add these styles
@@ -798,6 +827,45 @@ body {
     .folder-card {
         &:hover {
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .folder-name {
+            color: var(--text-primary);
+
+            strong {
+                color: var(--text-primary);
+            }
+        }
+
+        h5,
+        h6,
+        p {
+            color: var(--text-primary);
+        }
+
+        .text-muted {
+            color: var(--text-secondary) !important;
+        }
+
+        .card-title {
+            color: var(--text-primary);
+        }
+
+        .card-text {
+            color: var(--text-primary);
+        }
+    }
+
+    // Ensure all headings in folder view are visible
+    .folder-view {
+
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+            color: var(--text-primary);
         }
     }
 }
@@ -1219,4 +1287,157 @@ body {
     small.text-muted {
         color: var(--text-muted) !important;
     }
+}
+
+.attendee-selfie {
+    transition: transform 0.2s;
+
+    &:hover {
+        transform: scale(1.1);
+    }
+}
+
+[data-theme='dark'] .table {
+    --bs-table-color: var(--text-primary);
+    --bs-table-bg: transparent;
+    --bs-table-border-color: var(--border-color);
+}
+
+// Dark mode styles for the attendees table
+[data-theme='dark'] {
+    .table {
+        color: var(--text-primary);
+
+        thead th {
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        }
+
+        tbody td {
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        }
+    }
+
+    .card-title {
+        color: var(--text-primary);
+    }
+
+    .text-muted {
+        color: var(--text-secondary) !important;
+    }
+
+    .card {
+        background-color: var(--bg-secondary);
+        border-color: var(--border-color);
+    }
+}
+
+// Update the dark mode table styles
+[data-theme='dark'] {
+    .table {
+        color: var(--text-primary);
+
+        thead th {
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        }
+
+        tbody {
+            td {
+                color: var(--text-primary);
+                border-color: var(--border-color);
+
+                // Fix for sub-text and icons in table cells
+                .d-flex {
+                    color: var(--text-primary);
+
+                    svg {
+                        color: var(--text-primary);
+                    }
+                }
+            }
+
+            // Fix for all text elements inside table
+            p,
+            span,
+            div {
+                color: var(--text-primary);
+            }
+
+            // Fix specifically for phone numbers and other details
+            .d-flex.align-items-center {
+                color: var(--text-primary);
+            }
+        }
+
+        // Fix for any muted text in the table
+        .text-muted {
+            color: var(--text-secondary) !important;
+        }
+    }
+
+    // Ensure card content is also properly colored
+    .card {
+        .card-body {
+            color: var(--text-primary);
+
+            .card-text {
+                color: var(--text-primary);
+            }
+        }
+    }
+}
+
+// Logo styles for both modes
+.sidebar-logo {
+    height: 84px;
+    width: auto;
+    transition: filter 0.3s ease;
+}
+
+// Light mode specific styles
+[data-theme='light'] .sidebar-logo {
+    filter: brightness(0) saturate(100%) invert(23%) sepia(90%) saturate(1960%) hue-rotate(221deg) brightness(94%) contrast(95%);
+}
+
+// Dark mode specific styles
+[data-theme='dark'] .sidebar-logo {
+    filter: none; // Keep original white color
+}
+
+.btn-icon {
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    height: 100%;
+
+    &:hover {
+        background-color: var(--bs-gray-200);
+    }
+
+    svg {
+        width: 1.25rem;
+        height: 1.25rem;
+    }
+}
+
+// Add styles for the actions cell
+.table {
+    td.actions-cell {
+        padding: 0; // Remove padding from the cell
+        height: 100%;
+
+        .d-flex {
+            height: 100%;
+            align-items: stretch;
+        }
+    }
+}
+
+[data-theme='dark'] .btn-icon:hover {
+    background-color: var(--bs-gray-800);
 }
