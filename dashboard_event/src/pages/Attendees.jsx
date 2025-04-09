@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db, auth } from '../config/firebase';
+import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
+import { db, auth, storage } from '../config/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { HiCalendar, HiLocationMarker, HiUsers, HiMail, HiPhone } from 'react-icons/hi';
+import { ref, listAll } from 'firebase/storage';
 
 const Attendees = () => {
     const [events, setEvents] = useState([]);
@@ -151,8 +152,47 @@ const Attendees = () => {
                                                         <td>
                                                             <button
                                                                 className="btn btn-primary btn-sm"
-                                                                onClick={() => {
-                                                                    console.log('Running AI share for:', attendee);
+                                                                onClick={async () => {
+                                                                    const selfieUrl = attendee.selfieUrl;
+                                                                    const eventId = event.id;
+
+                                                                    try {
+                                                                        // Fetch event data using eventId
+                                                                        const eventDoc = await getDoc(doc(db, 'events', eventId));
+                                                                        if (eventDoc.exists()) {
+                                                                            const eventData = eventDoc.data();
+                                                                            const folders = eventData.folders || [];
+
+                                                                            // Log the correct folder path and file names from storage
+                                                                            for (const folder of folders) {
+                                                                                const folderPath = `/users/${user.uid}/event_folders/${event.event_name}/${folder}/photos`;
+                                                                                console.log(`Folder path: ${folderPath}`);
+
+                                                                                try {
+                                                                                    // Create a reference to the folder in storage
+                                                                                    const storageFolderRef = ref(storage, folderPath);
+
+                                                                                    // List all items (files) in the folder
+                                                                                    const listResult = await listAll(storageFolderRef);
+                                                                                    const fileNames = listResult.items.map(itemRef => itemRef.name);
+
+                                                                                    console.log(`Images in the folder ${folderPath} are:`, fileNames);
+                                                                                } catch (storageError) {
+                                                                                    console.error(`Error listing files in ${folderPath}:`, storageError);
+                                                                                    // Handle specific errors, e.g., folder not found
+                                                                                    if (storageError.code === 'storage/object-not-found') {
+                                                                                        console.log(`Folder not found or empty: ${folderPath}`);
+                                                                                    } else {
+                                                                                        // Handle other potential storage errors
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        } else {
+                                                                            console.error('No event found with ID:', eventId);
+                                                                        }
+                                                                    } catch (error) {
+                                                                        console.error('Error fetching event data:', error);
+                                                                    }
                                                                 }}
                                                             >
                                                                 Run AI Share
