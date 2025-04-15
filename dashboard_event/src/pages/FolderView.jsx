@@ -3,8 +3,204 @@ import { useParams } from 'react-router-dom';
 import { collection, getDoc, doc } from 'firebase/firestore';
 import { db, storage } from '../config/firebase';
 import { ref, uploadBytes, uploadBytesResumable, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
-import { HiFolder, HiUpload, HiPhotograph, HiVideoCamera, HiX, HiChevronLeft, HiChevronRight, HiZoomIn, HiZoomOut } from 'react-icons/hi';
+import { HiFolder, HiUpload, HiPhotograph, HiVideoCamera, HiX, HiChevronLeft, HiChevronRight, HiZoomIn, HiZoomOut, HiShare, HiMail, HiChat } from 'react-icons/hi';
 import imageCompression from 'browser-image-compression';
+
+const ShareWizardModal = ({ show, onClose, eventId, folderName }) => {
+    const [selectedShareMethod, setSelectedShareMethod] = useState(null);
+    const [shareFormData, setShareFormData] = useState({
+        contact: '',
+        instagramHandle: '',
+        email: '',
+        permissions: ['view']
+    });
+
+    const handleShareMethodSelect = (method) => {
+        setSelectedShareMethod(method);
+    };
+
+    const handleShareFormSubmit = (e) => {
+        e.preventDefault();
+        const shareUrl = `${window.location.origin}/folders/${eventId}/${folderName}`;
+        const message = `Check out these photos: ${shareUrl}`;
+
+        switch (selectedShareMethod) {
+            case 'whatsapp':
+                window.open(`https://wa.me/${shareFormData.contact}?text=${encodeURIComponent(message)}`, '_blank');
+                break;
+            case 'sms':
+                window.open(`sms:${shareFormData.contact}?body=${encodeURIComponent(message)}`, '_blank');
+                break;
+            case 'email':
+                window.open(`mailto:${shareFormData.email}?subject=Photo Share&body=${encodeURIComponent(message)}`, '_blank');
+                break;
+            case 'instagram':
+                navigator.clipboard.writeText(shareUrl)
+                    .then(() => alert('Link copied to clipboard! Share it on Instagram.'))
+                    .catch(() => alert('Failed to copy link.'));
+                break;
+        }
+
+        onClose();
+    };
+
+    const handlePermissionChange = (permission) => {
+        setShareFormData(prev => ({
+            ...prev,
+            permissions: prev.permissions.includes(permission)
+                ? prev.permissions.filter(p => p !== permission)
+                : [...prev.permissions, permission]
+        }));
+    };
+
+    if (!show) return null;
+
+    return (
+        <div className="modal fade show" style={{ display: 'block' }} tabIndex="-1">
+            <div className="modal-dialog modal-dialog-centered">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title">Share Photos</h5>
+                        <button type="button" className="btn-close" onClick={onClose}></button>
+                    </div>
+                    <div className="modal-body">
+                        {!selectedShareMethod ? (
+                            <div className="share-methods">
+                                <button
+                                    className="btn btn-outline-success w-100 mb-2 d-flex align-items-center justify-content-center"
+                                    onClick={() => handleShareMethodSelect('whatsapp')}
+                                >
+                                    <HiChat className="me-2" />
+                                    WhatsApp
+                                </button>
+                                <button
+                                    className="btn btn-outline-primary w-100 mb-2 d-flex align-items-center justify-content-center"
+                                    onClick={() => handleShareMethodSelect('sms')}
+                                >
+                                    <HiChat className="me-2" />
+                                    SMS
+                                </button>
+                                <button
+                                    className="btn btn-outline-danger w-100 mb-2 d-flex align-items-center justify-content-center"
+                                    onClick={() => handleShareMethodSelect('email')}
+                                >
+                                    <HiMail className="me-2" />
+                                    Email
+                                </button>
+                                <button
+                                    className="btn btn-outline-info w-100 mb-2 d-flex align-items-center justify-content-center"
+                                    onClick={() => handleShareMethodSelect('instagram')}
+                                >
+                                    <HiPhotograph className="me-2" />
+                                    Instagram
+                                </button>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleShareFormSubmit}>
+                                {selectedShareMethod === 'whatsapp' && (
+                                    <div className="mb-3">
+                                        <label className="form-label">WhatsApp Number</label>
+                                        <input
+                                            type="tel"
+                                            className="form-control"
+                                            placeholder="Enter WhatsApp number"
+                                            value={shareFormData.contact}
+                                            onChange={(e) => setShareFormData(prev => ({ ...prev, contact: e.target.value }))}
+                                            required
+                                        />
+                                    </div>
+                                )}
+                                {selectedShareMethod === 'sms' && (
+                                    <div className="mb-3">
+                                        <label className="form-label">Phone Number</label>
+                                        <input
+                                            type="tel"
+                                            className="form-control"
+                                            placeholder="Enter phone number"
+                                            value={shareFormData.contact}
+                                            onChange={(e) => setShareFormData(prev => ({ ...prev, contact: e.target.value }))}
+                                            required
+                                        />
+                                    </div>
+                                )}
+                                {selectedShareMethod === 'email' && (
+                                    <div className="mb-3">
+                                        <label className="form-label">Email Address</label>
+                                        <input
+                                            type="email"
+                                            className="form-control"
+                                            placeholder="Enter email address"
+                                            value={shareFormData.email}
+                                            onChange={(e) => setShareFormData(prev => ({ ...prev, email: e.target.value }))}
+                                            required
+                                        />
+                                    </div>
+                                )}
+                                {selectedShareMethod === 'instagram' && (
+                                    <div className="mb-3">
+                                        <label className="form-label">Instagram Handle</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            placeholder="Enter Instagram handle"
+                                            value={shareFormData.instagramHandle}
+                                            onChange={(e) => setShareFormData(prev => ({ ...prev, instagramHandle: e.target.value }))}
+                                            required
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="mb-3">
+                                    <label className="form-label">Permissions</label>
+                                    <div className="form-check">
+                                        <input
+                                            type="checkbox"
+                                            className="form-check-input"
+                                            checked={shareFormData.permissions.includes('view')}
+                                            onChange={() => handlePermissionChange('view')}
+                                        />
+                                        <label className="form-check-label">Just View</label>
+                                    </div>
+                                    <div className="form-check">
+                                        <input
+                                            type="checkbox"
+                                            className="form-check-input"
+                                            checked={shareFormData.permissions.includes('select')}
+                                            onChange={() => handlePermissionChange('select')}
+                                        />
+                                        <label className="form-check-label">View and Select</label>
+                                    </div>
+                                    <div className="form-check">
+                                        <input
+                                            type="checkbox"
+                                            className="form-check-input"
+                                            checked={shareFormData.permissions.includes('write')}
+                                            onChange={() => handlePermissionChange('write')}
+                                        />
+                                        <label className="form-check-label">Write</label>
+                                    </div>
+                                </div>
+
+                                <div className="d-flex justify-content-between">
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary"
+                                        onClick={() => setSelectedShareMethod(null)}
+                                    >
+                                        Back
+                                    </button>
+                                    <button type="submit" className="btn btn-primary">
+                                        Share
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export default function FolderView() {
     const { eventId, folderName } = useParams();
@@ -22,6 +218,7 @@ export default function FolderView() {
     const [selectMode, setSelectMode] = useState(false);
     const [loadingMedia, setLoadingMedia] = useState(true);
     const [uploadProgress, setUploadProgress] = useState({});
+    const [showShareModal, setShowShareModal] = useState(false);
 
     const thumbnailOptions = {
         maxSizeMB: 0.1,
@@ -340,6 +537,10 @@ export default function FolderView() {
         }
     };
 
+    const handleShareLink = () => {
+        setShowShareModal(true);
+    };
+
     const renderMediaGrid = () => (
         <div className="row g-4">
             {uploadedFiles.map((file, index) => (
@@ -470,6 +671,13 @@ export default function FolderView() {
                     >
                         <HiUpload className="me-2" />
                         Upload Media
+                    </button>
+                    <button
+                        className="btn btn-outline-primary d-flex align-items-center"
+                        onClick={handleShareLink}
+                    >
+                        <HiShare className="me-2" />
+                        Share Link
                     </button>
                 </div>
             </div>
@@ -650,6 +858,14 @@ export default function FolderView() {
                     <div className="modal-backdrop fade show"></div>
                 </>
             )}
+
+            {/* Add Share Wizard Modal */}
+            <ShareWizardModal
+                show={showShareModal}
+                onClose={() => setShowShareModal(false)}
+                eventId={eventId}
+                folderName={folderName}
+            />
         </div>
     );
 } 
