@@ -297,10 +297,6 @@ exports.matchFacesSequential = onRequest({ secrets: requiredSecrets, timeoutSeco
                                     matchedImages.push(matchData);
                                     console.log(`Match found in ${file.name}:`, matchData);
 
-                                    // Update Firestore with new match
-                                    await eventRef.update({
-                                        'aimatch': admin.firestore.FieldValue.arrayUnion(matchData)
-                                    });
                                 }
 
                                 scannedFiles++;
@@ -315,6 +311,12 @@ exports.matchFacesSequential = onRequest({ secrets: requiredSecrets, timeoutSeco
                                     'lastUpdated': admin.firestore.FieldValue.serverTimestamp()
                                 });
 
+                                if (matchedImages.length > 0) {
+                                    await eventRef.update({
+                                        'aimatch': matchedImages
+                                    });
+                                }
+
                                 console.log(`Progress: ${progress.toFixed(2)}% (${scannedFiles}/${totalFiles})`);
 
                             } catch (error) {
@@ -325,10 +327,9 @@ exports.matchFacesSequential = onRequest({ secrets: requiredSecrets, timeoutSeco
                         }
                     }
 
-                    // Final update
                     await eventRef.update({
-                        'status': 'completed',
-                        'progress': 100,
+                        'progress.status': 'completed',
+                        'progress.progress': 100,
                         'scannedFiles': totalFiles,
                         'matchesFound': matchedImages.length,
                         'lastUpdated': admin.firestore.FieldValue.serverTimestamp()
@@ -340,10 +341,10 @@ exports.matchFacesSequential = onRequest({ secrets: requiredSecrets, timeoutSeco
                     });
 
                 } catch (error) {
+
                     console.error('Error in async processing:', error);
                     await eventRef.update({
-                        'status': 'error',
-                        'progress': 0,
+                        'progress.status': 'error',
                         'error': error.message,
                         'lastUpdated': admin.firestore.FieldValue.serverTimestamp()
                     });
