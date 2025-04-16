@@ -108,7 +108,11 @@ exports.matchFaces = onRequest({ secrets: requiredSecrets, timeoutSeconds: 300, 
 
                     await eventRef.update({
                         'progress.totalFiles': totalFiles
-                    });
+                    });// ... after the imageFiles loop completes ...
+    console.log("Finished processing images.  matchedImages:", matchedImages, "scannedFiles:", scannedFiles);
+    return;  // Exit the function here - don't try to update Firestore yet.
+    // ... now the "About to update Firestore..." log and the conditional update
+
 // ... right before the final eventRef.update() ...
     console.log("About to update Firestore with matches:", matchedImages);
     if (matchedImages.length > 0) {
@@ -203,6 +207,8 @@ exports.matchFaces = onRequest({ secrets: requiredSecrets, timeoutSeconds: 300, 
 
 // Sequential face matching function
 exports.matchFacesSequential = onRequest({ secrets: requiredSecrets, timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
+    console.log("Hello World");
+
     cors(req, res, async () => {
         if (req.method !== 'POST') {
             return res.status(405).send('Method Not Allowed');
