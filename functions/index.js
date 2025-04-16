@@ -330,53 +330,42 @@ exports.matchFacesSequential = onRequest({ secrets: requiredSecrets, timeoutSeco
                                 scannedFiles++;
                                 const progress = (scannedFiles / totalFiles) * 100;
 
-                                // Update progress
-                                await eventRef.update({
-                                    'status': 'processing',
-                                    'progress': progress,
-                                    'scannedFiles': scannedFiles,
-                                    'matchesFound': matchedImages.length,
-                                    'lastUpdated': admin.firestore.FieldValue.serverTimestamp()
-                                });
-
-                                if (matchedImages.length > 0) {
-                                    await eventRef.update({
-                                        'aimatch': matchedImages
-                                    });
-                                }
-
                                 console.log(`Progress: ${progress.toFixed(2)}% (${scannedFiles}/${totalFiles})`);
 
                             } catch (error) {
                                 console.error(`Error processing ${file.name}:`, error);
-                                // Continue with next file even if one fails
+                                console.error("Full Rekognition error:", JSON.stringify(error));
                                 continue;
                             }
                         }
                     }
-
+                    
+                     const finalProgress = (scannedFiles / totalFiles) * 100;
                     await eventRef.update({
                         'progress.status': 'completed',
-                        'progress.progress': 100,
-                        'scannedFiles': totalFiles,
-                        'matchesFound': matchedImages.length,
-                        'lastUpdated': admin.firestore.FieldValue.serverTimestamp()
+                        'progress.progress': finalProgress,
+                        'progress.scannedFiles': scannedFiles,
+                        'progress.matchesFound': matchedImages.length,
+                        'progress.lastUpdated': admin.firestore.FieldValue.serverTimestamp(),
+                        ...(matchedImages.length > 0 ? { 'aimatch': matchedImages } : {}),
+
                     });
 
-                    console.log("Sequential face matching complete. Results:", {
+                    
+
+                    console.log("Face matching complete. Results:", {
                         matched_images: matchedImages,
                         count: matchedImages.length
                     });
 
                 } catch (error) {
-
                     console.error('Error in async processing:', error);
                     await eventRef.update({
                         'progress.status': 'error',
-                        'error': error.message,
-                        'lastUpdated': admin.firestore.FieldValue.serverTimestamp()
+                        'progress.error': error.message,
+                        'progress.lastUpdated': admin.firestore.FieldValue.serverTimestamp()
                     });
-                }
+
             })();
 
         } catch (error) {
