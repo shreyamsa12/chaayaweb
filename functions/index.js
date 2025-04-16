@@ -108,10 +108,25 @@ exports.matchFaces = onRequest({ secrets: requiredSecrets, timeoutSeconds: 300, 
 
                     await eventRef.update({
                         'progress.totalFiles': totalFiles
-                    });// ... after the imageFiles loop completes ...
-    console.log("Finished processing images.  matchedImages:", matchedImages, "scannedFiles:", scannedFiles);
-    return;  // Exit the function here - don't try to update Firestore yet.
-    // ... now the "About to update Firestore..." log and the conditional update
+                    });// ... inside the image processing loop ...
+let retries = 3;
+let success = false;
+while (retries > 0 && !success) {
+        try {
+            await delay(100); // Add a 100ms delay before calling compareFaces
+            // ... your rekognition.compareFaces call ...
+            success = true;
+        } catch (error) {
+            console.error(`Error processing ${file.name} (retry ${3 - retries + 1}):`, error);
+            if (retries > 0) {
+                await delay(1000 * (4 - retries));  // Exponential backoff: 1s, 2s, 3s
+            }
+            retries--;
+        }
+    }
+    if (!success) {
+        // Handle the case where all retries failed
+    }
 
 // ... right before the final eventRef.update() ...
     console.log("About to update Firestore with matches:", matchedImages);
