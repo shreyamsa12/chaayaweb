@@ -109,6 +109,13 @@ exports.matchFaces = onRequest({ secrets: requiredSecrets, timeoutSeconds: 300, 
                     await eventRef.update({
                         'progress.totalFiles': totalFiles
                     });
+// ... right before the final eventRef.update() ...
+    console.log("About to update Firestore with matches:", matchedImages);
+    if (matchedImages.length > 0) {
+        await eventRef.update({
+            'aimatch': matchedImages
+        });
+    }
 
                     for (const folder_path of folder_paths) {
                         const [files] = await bucket.getFiles({ prefix: folder_path });
