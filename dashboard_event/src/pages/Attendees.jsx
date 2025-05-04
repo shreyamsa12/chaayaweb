@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
-import { db, auth, storage } from '../config/firebase';
+import { collection, query, where, getDocs, getDoc, doc, updateDoc } from 'firebase/firestore';
+import { db, auth, storage, functions } from '../config/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { HiCalendar, HiLocationMarker, HiUsers, HiMail, HiPhone } from 'react-icons/hi';
 import { ref, listAll } from 'firebase/storage';
+import { httpsCallable } from 'firebase/functions';
 
 const Attendees = () => {
     const [events, setEvents] = useState([]);
@@ -34,6 +35,7 @@ const Attendees = () => {
                         const registrySnapshot = await getDocs(registryQuery);
 
                         const attendees = registrySnapshot.docs.map(doc => ({
+                            id: doc.id,
                             ...doc.data(),
                             registrationDate: doc.data().timestamp // Using timestamp as registration date
                         }));
@@ -151,51 +153,77 @@ const Attendees = () => {
                                                         </td>
                                                         <td>
                                                             <button
-                                                                className="btn btn-primary btn-sm"
                                                                 onClick={async () => {
                                                                     const selfieUrl = attendee.selfieUrl;
                                                                     const eventId = event.id;
+                                                                    const registryId = attendee.uid;
+
+                                                                    if (!registryId) {
+                                                                        console.error('No registry ID found for attendee:', attendee);
+                                                                        alert('Error: Could not find attendee registry. Please try again.');
+                                                                        return;
+                                                                    }
 
                                                                     try {
                                                                         // Fetch event data using eventId
                                                                         const eventDoc = await getDoc(doc(db, 'events', eventId));
-                                                                        if (eventDoc.exists()) {
-                                                                            const eventData = eventDoc.data();
-                                                                            const folders = eventData.folders || [];
-
-                                                                            // Log the correct folder path and file names from storage
-                                                                            for (const folder of folders) {
-                                                                                const folderPath = `/users/${user.uid}/event_folders/${event.event_name}/${folder}/photos`;
-                                                                                console.log(`Folder path: ${folderPath}`);
-
-                                                                                try {
-                                                                                    // Create a reference to the folder in storage
-                                                                                    const storageFolderRef = ref(storage, folderPath);
-
-                                                                                    // List all items (files) in the folder
-                                                                                    const listResult = await listAll(storageFolderRef);
-                                                                                    const fileNames = listResult.items.map(itemRef => itemRef.name);
-
-                                                                                    console.log(`Images in the folder ${folderPath} are:`, fileNames);
-                                                                                } catch (storageError) {
-                                                                                    console.error(`Error listing files in ${folderPath}:`, storageError);
-                                                                                    // Handle specific errors, e.g., folder not found
-                                                                                    if (storageError.code === 'storage/object-not-found') {
-                                                                                        console.log(`Folder not found or empty: ${folderPath}`);
-                                                                                    } else {
-                                                                                        // Handle other potential storage errors
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        } else {
-                                                                            console.error('No event found with ID:', eventId);
+                                                                        if (!eventDoc.exists()) {
+                                                                            throw new Error('Event not found');
                                                                         }
+
+                                                                        const eventData = eventDoc.data();
+                                                                        const folders = eventData.folders || [];
+
+                                                                        if (!folders || folders.length === 0) {
+                                                                            throw new Error('No folders found in the event data');
+                                                                        }
+
+                                                                        // Construct folder paths for the request
+                                                                        const folderPaths = folders.map(folder => {
+                                                                            // Remove any leading/trailing slashes and ensure proper format
+                                                                            const cleanFolder = folder.replace(/^\/+|\/+$/g, '');
+                                                                            // Construct the full path as expected by the cloud function
+                                                                            return `users/${user.uid}/event_folders/${event.event_name}/${cleanFolder}/thumbnails`.replace(/\/+/g, '/');
+                                                                        });
+
+                                                                        // Log request parameters with more details
+                                                                        console.log('Request parameters:', {
+                                                                            selfie_url: selfieUrl,
+                                                                            folder_paths: folderPaths,
+                                                                            eventsregistryId: registryId,
+                                                                            event_name: event.event_name,
+                                                                            folders_count: folders.length,
+                                                                            user_id: user.uid
+                                                                        });
+
+                                                                        // Create the callable function
+                                                                        const matchFacesSequential = httpsCallable(functions, 'matchFacesSequential');
+
+                                                                        // Call the function
+                                                                        const result = await matchFacesSequential({
+                                                                            selfie_url: selfieUrl,
+                                                                            folder_paths: folderPaths,
+                                                                            eventsregistryId: registryId
+                                                                        });
+
+                                                                        console.log('AI Share result:', result.data);
+
+                                                                        // Update the attendee's document with the match status
+                                                                        await updateDoc(doc(db, 'eventsregistry', registryId), {
+                                                                            matchStatus: 'processing',
+                                                                            lastMatchAttempt: new Date().toISOString()
+                                                                        });
+
+                                                                        alert('AI Share process started successfully! Check the matches view for results.');
                                                                     } catch (error) {
-                                                                        console.error('Error fetching event data:', error);
+                                                                        console.error('Error in AI Share:', error);
+                                                                        // Show more detailed error message
+                                                                        alert(`Error starting AI Share process: ${error.message}\n\nPlease check the console for more details.`);
                                                                     }
                                                                 }}
+                                                                className="btn btn-primary btn-sm"
                                                             >
-                                                                Run AI Share
+                                                                AI Share
                                                             </button>
                                                         </td>
                                                     </tr>

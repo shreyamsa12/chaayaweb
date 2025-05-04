@@ -1,11 +1,14 @@
 // ✅ Cloud Functions v2 - Firebase + AWS Rekognition Face Match
 
-const { onRequest } = require('firebase-functions/v2/https');
+const { onRequest, onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 const axios = require('axios');
 const AWS = require('aws-sdk');
 const cors = require('cors')({ origin: true });
 const functions = require('firebase-functions');
+const { httpsCallable } = require('firebase-functions/v2');
+const { matchFacesWithCollection } = require('./matchFacesWithCollection');
+const { matchFacesSequential } = require('./matchFacesSequential');
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -37,343 +40,71 @@ async function downloadStorageFileAsBuffer(filePath) {
     }
 }
 
+// Create or get face collection
+async function ensureCollection(rekognition, collectionId) {
+    try {
+        await rekognition.describeCollection({ CollectionId: collectionId }).promise();
+        console.log(`Collection ${collectionId} already exists`);
+    } catch (error) {
+        if (error.code === 'ResourceNotFoundException') {
+            await rekognition.createCollection({ CollectionId: collectionId }).promise();
+            console.log(`Created new collection ${collectionId}`);
+        } else {
+            throw error;
+        }
+    }
+}
+
+// Index faces in a collection
+async function indexFaces(rekognition, collectionId, imageBuffer, externalImageId) {
+    try {
+        const result = await rekognition.indexFaces({
+            CollectionId: collectionId,
+            Image: { Bytes: imageBuffer },
+            ExternalImageId: externalImageId,
+            MaxFaces: 1,
+            QualityFilter: 'AUTO',
+            DetectionAttributes: ['ALL']
+        }).promise();
+
+        if (result.FaceRecords.length === 0) {
+            console.log(`No face detected in image ${externalImageId}`);
+            return null;
+        }
+
+        console.log(`Successfully indexed face for ${externalImageId}`);
+        return result.FaceRecords[0].Face;
+    } catch (error) {
+        console.error(`Error indexing face for ${externalImageId}:`, error);
+        return null;
+    }
+}
+
+// Search for matching faces
+async function searchFaces(rekognition, collectionId, imageBuffer, similarityThreshold = 80) {
+    try {
+        const result = await rekognition.searchFacesByImage({
+            CollectionId: collectionId,
+            Image: { Bytes: imageBuffer },
+            MaxFaces: 1,
+            FaceMatchThreshold: similarityThreshold
+        }).promise();
+
+        return result.FaceMatches;
+    } catch (error) {
+        console.error('Error searching faces:', error);
+        return [];
+    }
+}
+
 // 🔐 Required secrets must be linked in function definition
 const requiredSecrets = ["AWS_KEY", "AWS_SECRET", "AWS_REGION", "STORAGE_BUCKET"];
 
-// --- Main Cloud Function ---
-exports.matchFaces = onRequest({ secrets: requiredSecrets, timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
-    cors(req, res, async () => {
-        if (req.method !== 'POST') {
-            return res.status(405).send('Method Not Allowed');
-        }
-
-        const storageBucketName = process.env.STORAGE_BUCKET;
-        const awsConfig = {
-            accessKeyId: process.env.AWS_KEY,
-            secretAccessKey: process.env.AWS_SECRET,
-            region: process.env.AWS_REGION,
-        };
-
-        console.log("ENV loaded:", {
-            storageBucket: storageBucketName,
-            awsKey: awsConfig.accessKeyId ? "✅ present" : "❌ missing",
-            awsSecret: awsConfig.secretAccessKey ? "✅ present" : "❌ missing",
-            awsRegion: awsConfig.region || "❌ missing"
-        });
-
-        const rekognition = new AWS.Rekognition(awsConfig);
-
-        try {
-            const { selfie_url, folder_paths, eventsregistryId } = req.body;
-            console.log("Received request:", { selfie_url, folder_paths, eventsregistryId });
-
-            if (!selfie_url || !folder_paths || !Array.isArray(folder_paths) || !eventsregistryId) {
-                return res.status(400).json({ error: 'Missing required fields: selfie_url, folder_paths, or eventsregistryId' });
-            }
-
-            const eventRef = admin.firestore().collection('eventsregistry').doc(eventsregistryId);
-            await eventRef.set({
-                aimatch: [],
-                progress: {
-                    totalFiles: 0,
-                    scannedFiles: 0,
-                    status: 'processing'
-                }
-            }, { merge: true });
-
-            res.status(200).json({
-                message: "Face matching process started",
-                eventsregistryId: eventsregistryId,
-                status: "processing"
-            });
-
-            (async () => {
-                try {
-                    const selfieBuffer = await downloadFileAsBuffer(selfie_url);
-                    let matchedImages = [];
-                    const similarityThreshold = 80;
-                    const batchSize = 3;
-                    let totalFiles = 0;
-                    let scannedFiles = 0;
-
-                    for (const folder_path of folder_paths) {
-                        const [files] = await bucket.getFiles({ prefix: folder_path });
-                        const imageFiles = files.filter(file =>
-                            !file.name.endsWith('/') &&
-                            file.name.match(/\.(jpg|jpeg|png)$/i)
-                        );
-                        totalFiles += imageFiles.length;
-                        console.log(`Found ${imageFiles.length} images in folder ${folder_path}`);
-                    }
-
-                    await eventRef.update({
-                        'progress.totalFiles': totalFiles
-                    });// ... inside the image processing loop ...
-let retries = 3;
-let success = false;
-while (retries > 0 && !success) {
-        try {
-            await delay(100); // Add a 100ms delay before calling compareFaces
-            // ... your rekognition.compareFaces call ...
-            success = true;
-        } catch (error) {
-            console.error(`Error processing ${file.name} (retry ${3 - retries + 1}):`, error);
-            if (retries > 0) {
-                await delay(1000 * (4 - retries));  // Exponential backoff: 1s, 2s, 3s
-            }
-            retries--;
-        }
-    }
-    if (!success) {
-        // Handle the case where all retries failed
-    }
-
-// ... right before the final eventRef.update() ...
-    console.log("About to update Firestore with matches:", matchedImages);
-    if (matchedImages.length > 0) {
-        await eventRef.update({
-            'aimatch': matchedImages
-        });
-    }
-
-                    for (const folder_path of folder_paths) {
-                        const [files] = await bucket.getFiles({ prefix: folder_path });
-
-                        const imageFiles = files.filter(file =>
-                            !file.name.endsWith('/') &&
-                            file.name.match(/\.(jpg|jpeg|png)$/i)
-                        );
-
-                        for (let i = 0; i < imageFiles.length; i += batchSize) {
-                            const batch = imageFiles.slice(i, i + batchSize);
-
-                            const batchResults = await Promise.all(batch.map(async (file) => {
-                                try {
-                                    const targetBuffer = await downloadStorageFileAsBuffer(file.name);
-                                    if (!targetBuffer) return null;
-
-                                    const result = await rekognition.compareFaces({
-                                        SourceImage: { Bytes: selfieBuffer },
-                                        TargetImage: { Bytes: targetBuffer },
-                                        SimilarityThreshold: similarityThreshold,
-                                    }).promise();
-
-                                    if (result.FaceMatches?.length > 0) {
-                                        const match = result.FaceMatches[0];
-                                        return {
-                                            imageUrl: `https://storage.googleapis.com/${storageBucketName}/${file.name}`,
-                                            similarity: match.Similarity,
-                                            confidence: match.Face?.Confidence
-                                        };
-                                    }
-                                } catch (error) {
-                                    console.error(`Error processing ${file.name}:`, error);
-                                }
-                                return null;
-                            }));
-
-                            scannedFiles += batch.length;
-                            const validMatches = batchResults.filter(result => result !== null);
-                            matchedImages = matchedImages.concat(validMatches);
-
-                            const progress = (scannedFiles / totalFiles) * 100;
-
-                            await eventRef.update({
-                                'progress.status': 'processing',
-                                'progress.progress': progress,
-                                'progress.scannedFiles': scannedFiles,
-                                'progress.matchesFound': validMatches.length,
-                                'progress.lastUpdated': admin.firestore.FieldValue.serverTimestamp()
-                            });
-
-                            if (validMatches.length > 0) {
-                                await eventRef.update({
-                                    'aimatch': admin.firestore.FieldValue.arrayUnion(...validMatches)
-                                });
-                            }
-                        }
-                    }
-
-                    await eventRef.update({
-                        'progress.status': 'completed',
-                        'progress.scannedFiles': totalFiles
-                    });
-
-                    console.log("Face matching complete. Results:", {
-                        matched_images: matchedImages,
-                        count: matchedImages.length
-                    });
-
-                } catch (error) {
-                    console.error('Error in async processing:', error);
-                    await eventRef.update({
-                        'progress.status': 'error',
-                        'progress.error': error.message
-                    });
-                }
-            })();
-
-        } catch (error) {
-            console.error('Critical error:', error);
-            return res.status(500).json({ error: `Internal Server Error: ${error.message}` });
-        }
-    });
-});
+// Main face matching function using collections
+exports.matchFacesWithCollection = matchFacesWithCollection;
 
 // Sequential face matching function
-exports.matchFacesSequential = onRequest({ secrets: requiredSecrets, timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
-    console.log("Hello World");
-
-    cors(req, res, async () => {
-        if (req.method !== 'POST') {
-            return res.status(405).send('Method Not Allowed');
-        }
-
-        const storageBucketName = process.env.STORAGE_BUCKET;
-        const awsConfig = {
-            accessKeyId: process.env.AWS_KEY,
-            secretAccessKey: process.env.AWS_SECRET,
-            region: process.env.AWS_REGION,
-        };
-
-        console.log("ENV loaded:", {
-            storageBucket: storageBucketName,
-            awsKey: awsConfig.accessKeyId ? "✅ present" : "❌ missing",
-            awsSecret: awsConfig.secretAccessKey ? "✅ present" : "❌ missing",
-            awsRegion: awsConfig.region || "❌ missing"
-        });
-
-        const rekognition = new AWS.Rekognition(awsConfig);
-
-        try {
-            const { selfie_url, folder_paths, eventsregistryId } = req.body;
-            console.log("Received request:", { selfie_url, folder_paths, eventsregistryId });
-
-            if (!selfie_url || !folder_paths || !Array.isArray(folder_paths) || !eventsregistryId) {
-                return res.status(400).json({ error: 'Missing required fields: selfie_url, folder_paths, or eventsregistryId' });
-            }
-
-            const eventRef = admin.firestore().collection('eventsregistry').doc(eventsregistryId);
-            await eventRef.set({
-                aimatch: [],
-                progress: {
-                    totalFiles: 0,
-                    scannedFiles: 0,
-                    status: 'processing'
-                }
-            }, { merge: true });
-
-            res.status(200).json({
-                message: "Sequential face matching process started",
-                eventsregistryId: eventsregistryId,
-                status: "processing"
-            });
-
-            (async () => {
-                try {
-                    const selfieBuffer = await downloadFileAsBuffer(selfie_url);
-                    let matchedImages = [];
-                    const similarityThreshold = 80;
-                    let totalFiles = 0;
-                    let scannedFiles = 0;
-
-                    // Count total files first
-                    for (const folder_path of folder_paths) {
-                        const [files] = await bucket.getFiles({ prefix: folder_path });
-                        const imageFiles = files.filter(file =>
-                            !file.name.endsWith('/') &&
-                            file.name.match(/\.(jpg|jpeg|png)$/i)
-                        );
-                        totalFiles += imageFiles.length;
-                        console.log(`Found ${imageFiles.length} images in folder ${folder_path}`);
-                    }
-
-                    await eventRef.update({
-                        'progress.totalFiles': totalFiles
-                    });
-
-                    // Process files sequentially
-                    for (const folder_path of folder_paths) {
-                        const [files] = await bucket.getFiles({ prefix: folder_path });
-                        const imageFiles = files.filter(file =>
-                            !file.name.endsWith('/') &&
-                            file.name.match(/\.(jpg|jpeg|png)$/i)
-                        );
-
-                        for (const file of imageFiles) {
-                            try {
-                                console.log(`Processing file: ${file.name}`);
-                                const targetBuffer = await downloadStorageFileAsBuffer(file.name);
-                                if (!targetBuffer) {
-                                    console.log(`Skipping file ${file.name} - could not download`);
-                                    continue;
-                                }
-
-                                const result = await rekognition.compareFaces({
-                                    SourceImage: { Bytes: selfieBuffer },
-                                    TargetImage: { Bytes: targetBuffer },
-                                    SimilarityThreshold: similarityThreshold,
-                                }).promise();
-
-                                if (result.FaceMatches?.length > 0) {
-                                    const match = result.FaceMatches[0];
-                                    const matchData = {
-                                        imageUrl: `https://storage.googleapis.com/${storageBucketName}/${file.name}`,
-                                        similarity: match.Similarity,
-                                        confidence: match.Face?.Confidence
-                                    };
-                                    matchedImages.push(matchData);
-                                    console.log(`Match found in ${file.name}:`, matchData);
-
-                                }
-
-                                scannedFiles++;
-                                const progress = (scannedFiles / totalFiles) * 100;
-
-                                console.log(`Progress: ${progress.toFixed(2)}% (${scannedFiles}/${totalFiles})`);
-
-                            } catch (error) {
-                                console.error(`Error processing ${file.name}:`, error);
-                                console.error("Full Rekognition error:", JSON.stringify(error));
-                                continue;
-                            }
-                        }
-                    }
-                    
-                     const finalProgress = (scannedFiles / totalFiles) * 100;
-                    await eventRef.update({
-                        'progress.status': 'completed',
-                        'progress.progress': finalProgress,
-                        'progress.scannedFiles': scannedFiles,
-                        'progress.matchesFound': matchedImages.length,
-                        'progress.lastUpdated': admin.firestore.FieldValue.serverTimestamp(),
-                        ...(matchedImages.length > 0 ? { 'aimatch': matchedImages } : {}),
-
-                    });
-
-                    
-
-                    console.log("Face matching complete. Results:", {
-                        matched_images: matchedImages,
-                        count: matchedImages.length
-                    });
-
-                } catch (error) {
-                    console.error('Error in async processing:', error);
-                    await eventRef.update({
-                        'progress.status': 'error',
-                        'progress.error': error.message,
-                        'progress.lastUpdated': admin.firestore.FieldValue.serverTimestamp()
-                    });
-
-            })();
-
-        } catch (error) {
-            console.error('Critical error:', error);
-            return res.status(500).json({ error: `Internal Server Error: ${error.message}` });
-        }
-    });
-});
+exports.matchFacesSequential = matchFacesSequential;
 
 // Sequential face matching function without database updates
 exports.matchFacesSequentialNoDB = onRequest({ secrets: requiredSecrets, timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
@@ -440,21 +171,97 @@ exports.matchFacesSequentialNoDB = onRequest({ secrets: requiredSecrets, timeout
                             continue;
                         }
 
-                        const result = await rekognition.compareFaces({
-                            SourceImage: { Bytes: selfieBuffer },
-                            TargetImage: { Bytes: targetBuffer },
-                            SimilarityThreshold: similarityThreshold,
-                        }).promise();
+                        console.log(`Buffer sizes - Selfie: ${selfieBuffer.length}, Target: ${targetBuffer.length}`);
 
-                        if (result.FaceMatches?.length > 0) {
-                            const match = result.FaceMatches[0];
-                            const matchData = {
-                                imageUrl: `https://firebasestorage.googleapis.com/v0/b/${storageBucketName}/o/${encodeURIComponent(file.name)}?alt=media`,
-                                similarity: match.Similarity,
-                                confidence: match.Face?.Confidence
-                            };
-                            matchedImages.push(matchData);
-                            console.log(`Match found in ${file.name}:`, matchData);
+                        // Validate buffer sizes
+                        if (selfieBuffer.length > 5 * 1024 * 1024 || targetBuffer.length > 5 * 1024 * 1024) {
+                            console.log(`Warning: Large buffer detected - Selfie: ${(selfieBuffer.length / 1024 / 1024).toFixed(2)}MB, Target: ${(targetBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+                        }
+
+                        console.log(`Comparing faces for file: ${file.name}`);
+                        let retryCount = 0;
+                        const maxRetries = 3;
+
+                        while (retryCount < maxRetries) {
+                            try {
+                                console.log(`Attempt ${retryCount + 1} for file: ${file.name}`);
+                                console.log(`Preparing AWS Rekognition request for ${file.name}`);
+
+                                // Add a small delay between retries
+                                if (retryCount > 0) {
+                                    console.log(`Waiting 2 seconds before retry ${retryCount + 1}`);
+                                    await new Promise(resolve => setTimeout(resolve, 2000));
+                                }
+
+                                console.log(`Sending request to AWS Rekognition for ${file.name}`);
+                                const result = await rekognition.compareFaces({
+                                    SourceImage: { Bytes: selfieBuffer },
+                                    TargetImage: { Bytes: targetBuffer },
+                                    SimilarityThreshold: similarityThreshold,
+                                }).promise();
+                                console.log(`Received response from AWS Rekognition for ${file.name}`);
+
+                                console.log(`Rekognition result for ${file.name}:`, {
+                                    hasMatches: result.FaceMatches?.length > 0,
+                                    matchCount: result.FaceMatches?.length || 0,
+                                    sourceFaceConfidence: result.SourceImageFace?.Confidence,
+                                    unmatchedFaces: result.UnmatchedFaces?.length || 0,
+                                    attempt: retryCount + 1,
+                                    responseTime: new Date().toISOString()
+                                });
+
+                                if (result.FaceMatches?.length > 0) {
+                                    const match = result.FaceMatches[0];
+                                    const matchData = {
+                                        imageUrl: `https://firebasestorage.googleapis.com/v0/b/${storageBucketName}/o/${encodeURIComponent(file.name)}?alt=media`,
+                                        similarity: match.Similarity,
+                                        confidence: match.Face?.Confidence
+                                    };
+                                    matchedImages.push(matchData);
+                                    console.log(`Match found in ${file.name}:`, matchData);
+                                }
+
+                                // If we get here, the call was successful
+                                break;
+
+                            } catch (rekognitionError) {
+                                console.error(`Rekognition error for ${file.name} (Attempt ${retryCount + 1}):`, {
+                                    error: rekognitionError.message,
+                                    code: rekognitionError.code,
+                                    requestId: rekognitionError.requestId,
+                                    statusCode: rekognitionError.statusCode,
+                                    time: rekognitionError.time
+                                });
+
+                                // Log the error to Firestore
+                                try {
+                                    await eventRef.update({
+                                        'progress.errors': admin.firestore.FieldValue.arrayUnion({
+                                            file: file.name,
+                                            error: `Rekognition Error (Attempt ${retryCount + 1}): ${rekognitionError.message}`,
+                                            code: rekognitionError.code,
+                                            timestamp: admin.firestore.FieldValue.serverTimestamp()
+                                        })
+                                    });
+                                } catch (updateError) {
+                                    console.error('Error updating error log:', updateError);
+                                }
+
+                                retryCount++;
+
+                                // If we've exhausted all retries, skip this file
+                                if (retryCount === maxRetries) {
+                                    console.log(`Max retries reached for ${file.name}, skipping...`);
+                                    break;
+                                }
+
+                                // If it's a timeout or throttling error, wait longer
+                                if (rekognitionError.code === 'ThrottlingException' ||
+                                    rekognitionError.code === 'RequestTimeout' ||
+                                    rekognitionError.message.includes('timeout')) {
+                                    await new Promise(resolve => setTimeout(resolve, 5000)); // 5 second delay
+                                }
+                            }
                         }
 
                         scannedFiles++;
