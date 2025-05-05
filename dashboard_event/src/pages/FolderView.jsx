@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { collection, getDoc, doc } from 'firebase/firestore';
+import { collection, getDoc, doc, query, orderBy, limit, startAfter, getDocs, addDoc, where, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db, storage } from '../config/firebase';
 import { ref, uploadBytes, uploadBytesResumable, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
-import { HiFolder, HiUpload, HiPhotograph, HiVideoCamera, HiX, HiChevronLeft, HiChevronRight, HiZoomIn, HiZoomOut, HiShare, HiMail, HiChat } from 'react-icons/hi';
+import { HiFolder, HiUpload, HiPhotograph, HiVideoCamera, HiX, HiChevronLeft, HiChevronRight, HiZoomIn, HiZoomOut, HiShare, HiMail, HiChat, HiCog } from 'react-icons/hi';
 import imageCompression from 'browser-image-compression';
+
+// Cloud function URL
+const CLOUD_FUNCTION_URL = 'https://us-central1-photoshoto-a7226.cloudfunctions.net';
 
 const ShareWizardModal = ({ show, onClose, eventId, folderName }) => {
     const [selectedShareMethod, setSelectedShareMethod] = useState(null);
@@ -202,6 +205,131 @@ const ShareWizardModal = ({ show, onClose, eventId, folderName }) => {
     );
 };
 
+const FaceResultsModal = ({ show, onClose, results }) => {
+    if (!show || !results) return null;
+
+    return (
+        <div className="modal fade show" style={{ display: 'block' }} tabIndex="-1">
+            <div className="modal-dialog modal-xl">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title">Face Detection Results - {results.fileName}</h5>
+                        <button type="button" className="btn-close" onClick={onClose}></button>
+                    </div>
+                    <div className="modal-body">
+                        {results.results.length === 0 ? (
+                            <p>No face detection results found for this image.</p>
+                        ) : (
+                            <div className="table-responsive">
+                                <table className="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Collection ID</th>
+                                            <th>Status</th>
+                                            <th>Processed At</th>
+                                            <th>Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {results.results.map((result, index) => (
+                                            <tr key={result.id || index}>
+                                                <td>{result.collectionId}</td>
+                                                <td>
+                                                    {result.message ? (
+                                                        <span className="badge bg-warning">{result.message}</span>
+                                                    ) : (
+                                                        <span className={`badge ${result.faceIndexed ? 'bg-success' : 'bg-danger'}`}>
+                                                            {result.faceIndexed ?
+                                                                `${result.faceCount || 1} Face${result.faceCount > 1 ? 's' : ''} Detected` :
+                                                                'No Face Detected'}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td>{new Date(result.processedAt).toLocaleString()}</td>
+                                                <td>
+                                                    {result.faceDetails ? (
+                                                        <div>
+                                                            {Array.isArray(result.faceDetails.faces) ? (
+                                                                <div>
+                                                                    <div className="alert alert-info mb-3">
+                                                                        <p className="mb-1"><strong>Total Faces Detected:</strong> {result.faceDetails.metadata.totalFacesDetected}</p>
+                                                                        {result.faceDetails.metadata.hasMoreFaces && (
+                                                                            <p className="mb-0 text-warning">
+                                                                                <i className="fas fa-exclamation-triangle me-2"></i>
+                                                                                Maximum face limit reached ({result.faceDetails.metadata.maxFacesAllowed}). Some faces may not have been detected.
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+                                                                        {result.faceDetails.faces.map((face, faceIndex) => (
+                                                                            <div key={face.faceId} className="col">
+                                                                                <div className="card h-100">
+                                                                                    <div className="card-header">
+                                                                                        <h6 className="mb-0">Face {faceIndex + 1}</h6>
+                                                                                    </div>
+                                                                                    <div className="card-body">
+                                                                                        <div className="mb-2">
+                                                                                            <strong>Confidence:</strong> {face.confidence?.toFixed(2)}%
+                                                                                        </div>
+                                                                                        <div className="mb-2">
+                                                                                            <strong>Face ID:</strong> {face.faceId}
+                                                                                        </div>
+                                                                                        <div className="mb-2">
+                                                                                            <strong>Bounding Box:</strong>
+                                                                                            <ul className="list-unstyled mb-0">
+                                                                                                <li>Width: {(face.boundingBox?.Width * 100).toFixed(1)}%</li>
+                                                                                                <li>Height: {(face.boundingBox?.Height * 100).toFixed(1)}%</li>
+                                                                                                <li>Left: {(face.boundingBox?.Left * 100).toFixed(1)}%</li>
+                                                                                                <li>Top: {(face.boundingBox?.Top * 100).toFixed(1)}%</li>
+                                                                                            </ul>
+                                                                                        </div>
+                                                                                        {face.pose && (
+                                                                                            <div>
+                                                                                                <strong>Pose:</strong>
+                                                                                                <ul className="list-unstyled mb-0">
+                                                                                                    <li>Pitch: {face.pose.Pitch?.toFixed(1)}°</li>
+                                                                                                    <li>Roll: {face.pose.Roll?.toFixed(1)}°</li>
+                                                                                                    <li>Yaw: {face.pose.Yaw?.toFixed(1)}°</li>
+                                                                                                </ul>
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div>
+                                                                    <p><strong>Confidence:</strong> {result.faceDetails.confidence?.toFixed(2)}%</p>
+                                                                    <p><strong>Face ID:</strong> {result.faceDetails.faceId}</p>
+                                                                    <p><strong>Bounding Box:</strong> {JSON.stringify(result.faceDetails.boundingBox)}</p>
+                                                                    {result.faceDetails.pose && (
+                                                                        <p><strong>Pose:</strong> {JSON.stringify(result.faceDetails.pose)}</p>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-muted">{result.message || 'No face details available'}</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                    <div className="modal-footer">
+                        <button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export default function FolderView() {
     const { eventId, folderName } = useParams();
     const [event, setEvent] = useState(null);
@@ -219,6 +347,18 @@ export default function FolderView() {
     const [loadingMedia, setLoadingMedia] = useState(true);
     const [uploadProgress, setUploadProgress] = useState({});
     const [showShareModal, setShowShareModal] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalFiles, setTotalFiles] = useState(0);
+    const [lastDoc, setLastDoc] = useState(null);
+    const [hasMoreFiles, setHasMoreFiles] = useState(true);
+    const [isIndexing, setIsIndexing] = useState(false);
+    const [processingProgress, setProcessingProgress] = useState(null);
+    const [processingStatus, setProcessingStatus] = useState('');
+    const [resumeToken, setResumeToken] = useState(null);
+    const [isRecreatingThumbnails, setIsRecreatingThumbnails] = useState(false);
+    const [showFaceResultsModal, setShowFaceResultsModal] = useState(false);
+    const [selectedFileFaceResults, setSelectedFileFaceResults] = useState(null);
+    const IMAGES_PER_PAGE = 12;
 
     const thumbnailOptions = {
         maxSizeMB: 0.1,
@@ -244,74 +384,240 @@ export default function FolderView() {
         fetchEvent();
     }, [eventId]);
 
+    // Function to migrate existing files to Firestore
+    const migrateExistingFiles = async (basePath) => {
+        const filesRef = collection(db, 'files');
+        const photosRef = ref(storage, `${basePath}/photos`);
+        const videosRef = ref(storage, `${basePath}/videos`);
+
+        // Fetch all existing files from Storage
+        const [photosResult, videosResult] = await Promise.all([
+            listAll(photosRef).catch(() => ({ items: [] })),
+            listAll(videosRef).catch(() => ({ items: [] }))
+        ]);
+
+        const allRefs = [
+            ...photosResult.items.map(ref => ({ ref, type: 'photos' })),
+            ...videosResult.items.map(ref => ({ ref, type: 'videos' }))
+        ];
+
+        // Process each file
+        for (const { ref, type } of allRefs) {
+            try {
+                // Check if file already exists in Firestore
+                const fileQuery = query(
+                    filesRef,
+                    where('path', '==', ref.fullPath)
+                );
+                const querySnapshot = await getDocs(fileQuery);
+
+                if (querySnapshot.empty) {
+                    // File doesn't exist in Firestore, add it
+                    const timestamp = parseInt(ref.name.split('_')[0]);
+                    const fileData = {
+                        name: ref.name,
+                        path: ref.fullPath,
+                        type: type,
+                        uploadedAt: timestamp,
+                        eventId: eventId,
+                        folderName: folderName,
+                        userId: event.event_host,
+                        thumbnailPath: type === 'photos' ? ref.fullPath.replace(`/${type}/`, '/thumbnails/') : null
+                    };
+
+                    await addDoc(filesRef, fileData);
+                    console.log(`Migrated file: ${ref.name}`);
+                }
+            } catch (error) {
+                console.error(`Error migrating file ${ref.name}:`, error);
+            }
+        }
+    };
+
+    // Effect to fetch files when page changes
     useEffect(() => {
-        const fetchExistingFiles = async () => {
+        const fetchFiles = async () => {
             if (!event || !event.event_host) return;
 
             setLoadingMedia(true);
             try {
                 const basePath = `users/${event.event_host}/event_folders/${event.event_name}/${folderName}`;
 
-                // Fetch photos, videos, and thumbnails
-                const photosRef = ref(storage, `${basePath}/photos`);
-                const videosRef = ref(storage, `${basePath}/videos`);
-                const thumbnailsRef = ref(storage, `${basePath}/thumbnails`);
-
-                const [photosResult, videosResult, thumbnailsResult] = await Promise.all([
-                    listAll(photosRef).catch(() => ({ items: [] })),
-                    listAll(videosRef).catch(() => ({ items: [] })),
-                    listAll(thumbnailsRef).catch(() => ({ items: [] }))
-                ]);
-
-                // Create thumbnails map
-                const thumbnailsMap = {};
-                for (const thumbnailRef of thumbnailsResult.items) {
-                    const thumbnailUrl = await getDownloadURL(thumbnailRef);
-                    thumbnailsMap[thumbnailRef.name] = thumbnailUrl;
+                // Migrate existing files if needed (only on first page)
+                if (currentPage === 1) {
+                    await migrateExistingFiles(basePath);
                 }
 
-                const fetchFileDetails = async (fileRef, type) => {
-                    try {
-                        const url = await getDownloadURL(fileRef);
-                        return {
-                            name: fileRef.name,
-                            url: url,
-                            type: type,
-                            path: fileRef.fullPath,
-                            thumbnailUrl: type === 'photos' ? thumbnailsMap[fileRef.name] || url : null,
-                            uploadedAt: parseInt(fileRef.name.split('_')[0])
-                        };
-                    } catch (error) {
-                        console.error(`Error fetching file details for ${fileRef.name}:`, error);
-                        return null;
+                // Create Firestore query
+                const filesRef = collection(db, 'files');
+                let q = query(
+                    filesRef,
+                    where('eventId', '==', eventId),
+                    where('folderName', '==', folderName),
+                    orderBy('uploadedAt', 'desc'),
+                    limit(IMAGES_PER_PAGE)
+                );
+
+                // If not first page, start after last document
+                if (currentPage > 1 && lastDoc) {
+                    q = query(
+                        filesRef,
+                        where('eventId', '==', eventId),
+                        where('folderName', '==', folderName),
+                        orderBy('uploadedAt', 'desc'),
+                        startAfter(lastDoc),
+                        limit(IMAGES_PER_PAGE)
+                    );
+                }
+
+                try {
+                    // Try to get files from Firestore
+                    const querySnapshot = await getDocs(q);
+
+                    // Get the last document for pagination
+                    const lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1];
+                    setLastDoc(lastVisible);
+
+                    // Check if there are more files
+                    setHasMoreFiles(querySnapshot.docs.length === IMAGES_PER_PAGE);
+
+                    // Fetch file URLs and thumbnails
+                    const files = await Promise.all(
+                        querySnapshot.docs.map(async (doc) => {
+                            const fileData = doc.data();
+                            try {
+                                const fileRef = ref(storage, fileData.path);
+                                const url = await getDownloadURL(fileRef);
+
+                                let thumbnailUrl = null;
+                                if (fileData.type === 'photos') {
+                                    const thumbnailPath = fileData.path.replace(`/${fileData.type}/`, '/thumbnails/');
+                                    const thumbnailRef = ref(storage, thumbnailPath);
+                                    try {
+                                        thumbnailUrl = await getDownloadURL(thumbnailRef);
+                                    } catch (error) {
+                                        console.log('No thumbnail found, using original:', fileData.name);
+                                        thumbnailUrl = url;
+                                    }
+                                }
+
+                                return {
+                                    id: doc.id,
+                                    name: fileData.name,
+                                    url: url,
+                                    type: fileData.type,
+                                    path: fileData.path,
+                                    thumbnailUrl: thumbnailUrl || url,
+                                    uploadedAt: fileData.uploadedAt
+                                };
+                            } catch (error) {
+                                console.error(`Error fetching file details for ${fileData.name}:`, error);
+                                return null;
+                            }
+                        })
+                    );
+
+                    setUploadedFiles(files.filter(file => file !== null));
+
+                    // Update total count (only on first page)
+                    if (currentPage === 1) {
+                        const countQuery = query(
+                            filesRef,
+                            where('eventId', '==', eventId),
+                            where('folderName', '==', folderName)
+                        );
+                        const countSnapshot = await getDocs(countQuery);
+                        setTotalFiles(countSnapshot.size);
                     }
-                };
+                } catch (error) {
+                    // If Firestore query fails (e.g., index not ready), fall back to Storage
+                    console.log('Falling back to Storage for file listing');
+                    const photosRef = ref(storage, `${basePath}/photos`);
+                    const videosRef = ref(storage, `${basePath}/videos`);
 
-                const photoFiles = await Promise.all(
-                    photosResult.items.map(ref => fetchFileDetails(ref, 'photos'))
-                );
+                    const [photosResult, videosResult] = await Promise.all([
+                        listAll(photosRef).catch(() => ({ items: [] })),
+                        listAll(videosRef).catch(() => ({ items: [] }))
+                    ]);
 
-                const videoFiles = await Promise.all(
-                    videosResult.items.map(ref => fetchFileDetails(ref, 'videos'))
-                );
+                    const allRefs = [
+                        ...photosResult.items.map(item => ({ ref: item, type: 'photos' })),
+                        ...videosResult.items.map(item => ({ ref: item, type: 'videos' }))
+                    ].sort((a, b) => {
+                        const timestampA = parseInt(a.ref.name.split('_')[0]);
+                        const timestampB = parseInt(b.ref.name.split('_')[0]);
+                        return timestampB - timestampA;
+                    });
 
-                // Combine and sort files by uploadedAt timestamp
-                const allFiles = [...photoFiles, ...videoFiles]
-                    .filter(file => file !== null)
-                    .sort((a, b) => b.uploadedAt - a.uploadedAt);
+                    const startIndex = (currentPage - 1) * IMAGES_PER_PAGE;
+                    const endIndex = startIndex + IMAGES_PER_PAGE;
+                    const currentPageRefs = allRefs.slice(startIndex, endIndex);
 
-                setUploadedFiles(allFiles);
+                    const files = await Promise.all(
+                        currentPageRefs.map(async ({ ref: fileRef, type }) => {
+                            try {
+                                const url = await getDownloadURL(fileRef);
+                                let thumbnailUrl = null;
+                                if (type === 'photos') {
+                                    const thumbnailPath = fileRef.fullPath.replace(`/${type}/`, '/thumbnails/');
+                                    const thumbnailRef = ref(storage, thumbnailPath);
+                                    try {
+                                        thumbnailUrl = await getDownloadURL(thumbnailRef);
+                                    } catch (error) {
+                                        thumbnailUrl = url;
+                                    }
+                                }
+
+                                return {
+                                    name: fileRef.name,
+                                    url: url,
+                                    type: type,
+                                    path: fileRef.fullPath,
+                                    thumbnailUrl: thumbnailUrl || url,
+                                    uploadedAt: parseInt(fileRef.name.split('_')[0])
+                                };
+                            } catch (error) {
+                                console.error(`Error fetching file details for ${fileRef.name}:`, error);
+                                return null;
+                            }
+                        })
+                    );
+
+                    setUploadedFiles(files.filter(file => file !== null));
+                    setHasMoreFiles(endIndex < allRefs.length);
+                    if (currentPage === 1) {
+                        setTotalFiles(allRefs.length);
+                    }
+                }
+
+                setLoadingMedia(false);
             } catch (error) {
-                console.error('Error fetching existing files:', error);
-            } finally {
+                console.error('Error fetching files:', error);
                 setLoadingMedia(false);
             }
         };
 
-        if (event) {
-            fetchExistingFiles();
+        fetchFiles();
+    }, [event, folderName, currentPage, lastDoc]);
+
+    const handleNextPage = () => {
+        if (hasMoreFiles) {
+            setCurrentPage(prev => prev + 1);
         }
-    }, [event, folderName]);
+    };
+
+    const handlePrevPage = () => {
+        if (currentPage > 1) {
+            setCurrentPage(prev => prev - 1);
+        }
+    };
+
+    // Reset pagination when folder changes
+    useEffect(() => {
+        setCurrentPage(1);
+        setLastDoc(null);
+        setHasMoreFiles(true);
+    }, [folderName]);
 
     const handleUploadClick = () => {
         setShowUploadModal(true);
@@ -340,8 +646,6 @@ export default function FolderView() {
             return;
         }
 
-        console.log(`Starting upload of ${files.length} ${type}`);
-
         if (!event || !event.event_host) {
             console.error('Event or event host not found');
             return;
@@ -352,14 +656,13 @@ export default function FolderView() {
 
         try {
             const basePath = `users/${event.event_host}/event_folders/${event.event_name}/${folderName}`;
-            console.log('Upload path:', basePath);
+            const filesRef = collection(db, 'files');
 
             for (const file of files) {
                 const timestamp = Date.now();
                 const fileName = `${timestamp}_${file.name}`;
                 const filePath = `${basePath}/${type}/${fileName}`;
 
-                // Initialize progress for this file
                 setUploadProgress(prev => ({
                     ...prev,
                     [fileName]: 0
@@ -367,11 +670,8 @@ export default function FolderView() {
 
                 try {
                     const storageRef = ref(storage, filePath);
-
-                    // Create upload task
                     const uploadTask = uploadBytesResumable(storageRef, file);
 
-                    // Monitor upload progress
                     uploadTask.on('state_changed',
                         (snapshot) => {
                             const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
@@ -384,7 +684,6 @@ export default function FolderView() {
                             console.error(`Error uploading ${fileName}:`, error);
                         },
                         async () => {
-                            // Upload completed
                             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
 
                             let thumbnailUrl = null;
@@ -398,6 +697,20 @@ export default function FolderView() {
                                 }
                             }
 
+                            // Store file metadata in Firestore
+                            const fileData = {
+                                name: fileName,
+                                path: filePath,
+                                type: type,
+                                uploadedAt: timestamp,
+                                eventId: eventId,
+                                folderName: folderName,
+                                userId: event.event_host,
+                                thumbnailPath: type === 'photos' ? `${basePath}/thumbnails/${fileName}` : null
+                            };
+
+                            await addDoc(filesRef, fileData);
+
                             const uploadedFile = {
                                 name: fileName,
                                 url: downloadURL,
@@ -410,7 +723,6 @@ export default function FolderView() {
                             uploadedFiles.push(uploadedFile);
                             setUploadedFiles(prev => [...prev, uploadedFile]);
 
-                            // Clear progress when complete
                             setUploadProgress(prev => {
                                 const newProgress = { ...prev };
                                 delete newProgress[fileName];
@@ -420,12 +732,10 @@ export default function FolderView() {
                     );
                 } catch (error) {
                     console.error(`Error uploading ${fileName}:`, error);
-                    console.error('Error details:', error.message);
                 }
             }
         } catch (error) {
             console.error('Upload error:', error);
-            console.error('Error details:', error.message);
         } finally {
             setIsProcessing(false);
         }
@@ -469,7 +779,7 @@ export default function FolderView() {
         }
 
         try {
-            // Delete main file
+            // Delete main file from Storage
             const fileRef = ref(storage, file.path);
             await deleteObject(fileRef);
 
@@ -479,6 +789,20 @@ export default function FolderView() {
                 const thumbnailRef = ref(storage, thumbnailPath);
                 await deleteObject(thumbnailRef).catch(err => console.log('No thumbnail found:', err));
             }
+
+            // Delete file metadata from Firestore
+            const filesRef = collection(db, 'files');
+            const q = query(
+                filesRef,
+                where('path', '==', file.path)
+            );
+            const querySnapshot = await getDocs(q);
+
+            // Delete all matching documents (should be only one)
+            const deletePromises = querySnapshot.docs.map(doc =>
+                deleteDoc(doc.ref)
+            );
+            await Promise.all(deletePromises);
 
             // Update state to remove the deleted file
             setUploadedFiles(prev => prev.filter(f => f.path !== file.path));
@@ -512,11 +836,13 @@ export default function FolderView() {
         }
 
         try {
+            const filesRef = collection(db, 'files');
+
             for (const filePath of selectedFiles) {
                 const file = uploadedFiles.find(f => f.path === filePath);
                 if (!file) continue;
 
-                // Delete main file
+                // Delete main file from Storage
                 const fileRef = ref(storage, file.path);
                 await deleteObject(fileRef);
 
@@ -526,6 +852,19 @@ export default function FolderView() {
                     const thumbnailRef = ref(storage, thumbnailPath);
                     await deleteObject(thumbnailRef).catch(err => console.log('No thumbnail found:', err));
                 }
+
+                // Delete file metadata from Firestore
+                const q = query(
+                    filesRef,
+                    where('path', '==', file.path)
+                );
+                const querySnapshot = await getDocs(q);
+
+                // Delete all matching documents (should be only one)
+                const deletePromises = querySnapshot.docs.map(doc =>
+                    deleteDoc(doc.ref)
+                );
+                await Promise.all(deletePromises);
             }
 
             // Update state to remove deleted files
@@ -541,70 +880,398 @@ export default function FolderView() {
         setShowShareModal(true);
     };
 
-    const renderMediaGrid = () => (
-        <div className="row g-4">
-            {uploadedFiles.map((file, index) => (
-                <div key={`uploaded-${index}`} className="col-md-3 col-sm-6">
-                    <div
-                        className="media-card"
-                        onClick={() => !selectMode && file.type === 'photos' && handleFileClick(file)}
-                        style={{ cursor: selectMode ? 'default' : file.type === 'photos' ? 'pointer' : 'default' }}
-                    >
-                        <div className="media-thumbnail">
-                            {file.type === 'photos' ? (
-                                <img
-                                    src={file.thumbnailUrl || file.url}
-                                    alt={file.name}
-                                    loading="lazy"
-                                    onError={(e) => {
-                                        console.log('Thumbnail load error, falling back to original:', file.name);
-                                        e.target.src = file.url;
-                                    }}
-                                />
-                            ) : (
-                                <div className="video-thumbnail">
-                                    <HiVideoCamera className="display-4" />
+    const handleIndexAll = async () => {
+        if (!event || !event.event_host) return;
+
+        setIsIndexing(true);
+        try {
+            const basePath = `users/${event.event_host}/event_folders/${event.event_name}/${folderName}`;
+            await migrateExistingFiles(basePath);
+            // Refresh the current page after indexing
+            setCurrentPage(1);
+            setLastDoc(null);
+            setHasMoreFiles(true);
+            alert('All files have been indexed successfully!');
+        } catch (error) {
+            console.error('Error indexing files:', error);
+            alert('Error indexing files. Please try again.');
+        } finally {
+            setIsIndexing(false);
+        }
+    };
+
+    const handleBatchProcess = async () => {
+        try {
+            if (!event || !event.event_host) {
+                throw new Error('Event or event host not found');
+            }
+
+            if (!confirm('Are you sure you want to process all images in this folder with AWS Rekognition?')) {
+                return;
+            }
+
+            setIsProcessing(true);
+            setProcessingProgress({ status: 'starting', message: 'Initializing batch processing...' });
+
+            // Get the base path for the folder
+            const basePath = `users/${event.event_host}/event_folders/${event.event_name}/${folderName}`;
+            const collectionId = `${eventId}_${folderName}`;
+
+            console.log('Starting batch process with:', {
+                basePath,
+                collectionId,
+                eventId,
+                folderName,
+                userId: event.event_host,
+                eventName: event.event_name
+            });
+
+            // Check for existing processing status
+            const processingStatusRef = doc(db, 'processingStatus', collectionId);
+            const processingStatusDoc = await getDoc(processingStatusRef);
+
+            let shouldResume = false;
+            if (processingStatusDoc.exists()) {
+                const status = processingStatusDoc.data();
+                console.log('Existing processing status:', status);
+                if (status.status === 'in_progress') {
+                    shouldResume = confirm('A previous processing session was interrupted. Would you like to resume?');
+                }
+            }
+
+            // Initialize or update processing status
+            console.log('Initializing processing status...');
+            await setDoc(processingStatusRef, {
+                status: 'in_progress',
+                totalFiles: 0,
+                processedFiles: 0,
+                failedFiles: 0,
+                lastUpdated: serverTimestamp(),
+                startTime: serverTimestamp(),
+                results: [],
+                resumeToken: shouldResume ? true : false
+            }, { merge: true });
+
+            setProcessingProgress({ status: 'processing', message: 'Processing images...' });
+
+            // Call the cloud function
+            console.log('Calling cloud function at:', `${CLOUD_FUNCTION_URL}/batchProcessImages`);
+            const requestBody = {
+                folder_path: basePath,
+                eventId: eventId,
+                folderName: folderName,
+                collectionId: collectionId,
+                userId: event.event_host,
+                eventName: event.event_name,
+                resumeToken: shouldResume,
+                processOptions: {
+                    includeThumbnails: true,
+                    fileTypes: ['photos'],
+                    includePaths: ['/thumbnails/'],
+                    excludePaths: ['/photos/']
+                }
+            };
+            console.log('Request body:', requestBody);
+
+            const response = await fetch(`${CLOUD_FUNCTION_URL}/batchProcessImages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody),
+            });
+
+            console.log('Cloud function response status:', response.status);
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('Cloud function error response:', errorData);
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Cloud function result:', result);
+
+            // Update processing status with results
+            await setDoc(processingStatusRef, {
+                status: 'completed',
+                totalFiles: result.totalFiles,
+                processedFiles: result.processedFiles,
+                failedFiles: result.failedFiles,
+                lastUpdated: serverTimestamp(),
+                endTime: serverTimestamp(),
+                results: result.results
+            }, { merge: true });
+
+            setProcessingProgress({
+                status: 'completed',
+                message: `Processing completed. Processed ${result.processedFiles} files successfully. ${result.failedFiles} files failed.`
+            });
+
+            // Refresh the current page by resetting pagination
+            setCurrentPage(1);
+            setLastDoc(null);
+            setHasMoreFiles(true);
+
+        } catch (error) {
+            console.error('Error in batch processing:', error);
+            console.error('Error stack:', error.stack);
+            setProcessingProgress({
+                status: 'error',
+                message: `Error processing images: ${error.message}`
+            });
+
+            // Update processing status to failed
+            try {
+                const collectionId = `${eventId}_${folderName}`;
+                const processingStatusRef = doc(db, 'processingStatus', collectionId);
+                await setDoc(processingStatusRef, {
+                    status: 'failed',
+                    lastUpdated: serverTimestamp(),
+                    error: error.message
+                }, { merge: true });
+            } catch (updateError) {
+                console.error('Error updating processing status:', updateError);
+            }
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleRecreateThumbnails = async () => {
+        if (!event || !folderName) return;
+
+        try {
+            setIsRecreatingThumbnails(true);
+            setProcessingStatus('Recreating thumbnails...');
+
+            const basePath = `users/${event.event_host}/event_folders/${event.event_name}/${folderName}`;
+            const response = await fetch(`${CLOUD_FUNCTION_URL}/recreateThumbnails`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    folder_path: basePath,
+                    eventId: eventId,
+                    folderName: folderName,
+                    quality: 85, // Higher quality JPEG
+                    maxSize: 5 * 1024 * 1024, // 5MB in bytes
+                    dimensions: {
+                        width: 1920, // Full HD width
+                        height: 1080 // Full HD height
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Thumbnail recreation result:', result);
+
+            // Update processing status
+            setProcessingStatus(`Successfully recreated ${result.processedFiles} thumbnails. ${result.failedFiles} failed.`);
+
+            // Refresh the current page to show new thumbnails
+            window.location.reload();
+        } catch (error) {
+            console.error('Error recreating thumbnails:', error);
+            setProcessingStatus(`Error recreating thumbnails: ${error.message}`);
+        } finally {
+            setIsRecreatingThumbnails(false);
+        }
+    };
+
+    const handleViewFaceResults = async (file) => {
+        try {
+            console.log('Fetching face results for file:', file.path);
+            const filesRef = collection(db, 'files');
+            const q = query(filesRef, where('path', '==', file.path));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                const docRef = querySnapshot.docs[0].ref;
+                const fileData = querySnapshot.docs[0].data();
+                console.log('Found file document:', docRef.id, 'with data:', fileData);
+
+                // Get the faceIndexing subcollection
+                const faceIndexingRef = collection(docRef, 'faceIndexing');
+                const faceResults = await getDocs(faceIndexingRef);
+
+                console.log('Face results count:', faceResults.size);
+
+                const results = faceResults.docs.map(doc => {
+                    const data = doc.data();
+                    console.log('Face result data:', data);
+                    return {
+                        id: doc.id,
+                        ...data
+                    };
+                });
+
+                if (results.length === 0) {
+                    // If no results in faceIndexing, check the main document's status
+                    if (fileData.hasFaceIndexing) {
+                        const status = fileData.faceDetectionStatus || 'no_face_detected';
+                        const message = status === 'face_detected' ?
+                            'Face was detected but details are not available' :
+                            'No faces detected in this image';
+
+                        setSelectedFileFaceResults({
+                            fileName: file.name,
+                            results: [{
+                                id: 'current',
+                                collectionId: `${eventId}_${folderName}`,
+                                faceIndexed: status === 'face_detected',
+                                processedAt: fileData.lastProcessed || new Date().toISOString(),
+                                faceDetails: null,
+                                message: message
+                            }]
+                        });
+                    } else {
+                        setSelectedFileFaceResults({
+                            fileName: file.name,
+                            results: [{
+                                id: 'not_processed',
+                                collectionId: `${eventId}_${folderName}`,
+                                faceIndexed: false,
+                                processedAt: new Date().toISOString(),
+                                faceDetails: null,
+                                message: 'This image has not been processed for face detection yet'
+                            }]
+                        });
+                    }
+                } else {
+                    setSelectedFileFaceResults({
+                        fileName: file.name,
+                        results: results
+                    });
+                }
+                setShowFaceResultsModal(true);
+            } else {
+                console.log('No file document found for path:', file.path);
+                setSelectedFileFaceResults({
+                    fileName: file.name,
+                    results: [{
+                        id: 'not_found',
+                        collectionId: `${eventId}_${folderName}`,
+                        faceIndexed: false,
+                        processedAt: new Date().toISOString(),
+                        faceDetails: null,
+                        message: 'File not found in database'
+                    }]
+                });
+                setShowFaceResultsModal(true);
+            }
+        } catch (error) {
+            console.error('Error fetching face results:', error);
+            alert('Error fetching face detection results: ' + error.message);
+        }
+    };
+
+    const SKELETON_COUNT = 8; // Number of skeleton cards to show
+
+    const renderMediaGrid = () => {
+        if (loadingMedia) {
+            return (
+                <div className="row g-4">
+                    {Array.from({ length: IMAGES_PER_PAGE }).map((_, idx) => (
+                        <div key={idx} className="col-md-3 col-sm-6">
+                            <div className="media-card">
+                                <div className="media-thumbnail skeleton" style={{ height: 200 }} />
+                                <div className="media-info mt-2">
+                                    <div className="skeleton" style={{ height: 16, width: '80%' }} />
+                                    <div className="skeleton mt-2" style={{ height: 12, width: '60%' }} />
                                 </div>
-                            )}
+                            </div>
                         </div>
-                        <div className="media-info">
-                            <div className="d-flex flex-column">
-                                <small className="text-muted text-truncate mb-2">
-                                    {file.name.split('_').slice(1).join('_')}
-                                </small>
-                                {selectMode ? (
-                                    <div className="form-check">
-                                        <input
-                                            type="checkbox"
-                                            className="form-check-input"
-                                            checked={selectedFiles.includes(file.path)}
-                                            onChange={(e) => handleSelectFile(file, e.target.checked)}
-                                            onClick={(e) => e.stopPropagation()}
-                                        />
-                                        <label className="form-check-label">Select</label>
-                                    </div>
+                    ))}
+                </div>
+            );
+        }
+
+        return (
+            <div className="row g-4">
+                {uploadedFiles.map((file, index) => (
+                    <div key={`uploaded-${index}`} className="col-md-3 col-sm-6">
+                        <div
+                            className="media-card"
+                            onClick={() => !selectMode && file.type === 'photos' && handleFileClick(file)}
+                            style={{ cursor: selectMode ? 'default' : file.type === 'photos' ? 'pointer' : 'default' }}
+                        >
+                            <div className="media-thumbnail">
+                                {file.type === 'photos' ? (
+                                    <img
+                                        src={file.thumbnailUrl || file.url}
+                                        alt={file.name}
+                                        loading="lazy"
+                                        onError={(e) => {
+                                            console.log('Thumbnail load error, falling back to original:', file.name);
+                                            e.target.src = file.url;
+                                        }}
+                                    />
                                 ) : (
-                                    <div>
-                                        {file.type === 'videos' && (
-                                            <a
-                                                href={file.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="btn btn-sm btn-primary"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                Play Video
-                                            </a>
-                                        )}
+                                    <div className="video-thumbnail">
+                                        <HiVideoCamera className="display-4" />
                                     </div>
                                 )}
                             </div>
+                            <div className="media-info">
+                                <div className="d-flex flex-column">
+                                    <small className="text-muted text-truncate mb-2">
+                                        {file.name.split('_').slice(1).join('_')}
+                                    </small>
+                                    {selectMode ? (
+                                        <div className="form-check">
+                                            <input
+                                                type="checkbox"
+                                                className="form-check-input"
+                                                checked={selectedFiles.includes(file.path)}
+                                                onChange={(e) => handleSelectFile(file, e.target.checked)}
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <label className="form-check-label">Select</label>
+                                        </div>
+                                    ) : (
+                                        <div className="d-flex gap-2">
+                                            {file.type === 'photos' && (
+                                                <button
+                                                    className="btn btn-sm btn-info"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleViewFaceResults(file);
+                                                    }}
+                                                >
+                                                    View Faces
+                                                </button>
+                                            )}
+                                            {file.type === 'videos' && (
+                                                <a
+                                                    href={file.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="btn btn-sm btn-primary"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    Play Video
+                                                </a>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            ))}
-        </div>
-    );
+                ))}
+            </div>
+        );
+    };
+
+    // Calculate total pages
+    const totalPages = Math.ceil(totalFiles / IMAGES_PER_PAGE);
 
     if (loading) {
         return (
@@ -630,57 +1297,109 @@ export default function FolderView() {
 
     return (
         <div className="container-fluid">
-            <div className="d-flex justify-content-between align-items-center mb-4">
+            <div className="d-flex justify-content-between align-items-center mb-3">
                 <div className="d-flex align-items-center">
                     <HiFolder className="me-2" style={{ fontSize: '2rem', color: 'var(--primary)' }} />
                     <h2 className="mb-0">
                         {event.event_name} / {folderName}
                     </h2>
                 </div>
-                <div className="d-flex gap-2">
-                    {uploadedFiles.length > 0 && (
+            </div>
+
+            <div className="d-flex gap-2 mb-4">
+                {uploadedFiles.length > 0 && (
+                    <>
+                        <button
+                            className="btn btn-outline-primary d-flex align-items-center"
+                            onClick={() => setSelectMode(!selectMode)}
+                        >
+                            {selectMode ? 'Cancel' : 'Select'}
+                        </button>
+                        {selectMode && (
+                            <>
+                                <button
+                                    className="btn btn-outline-secondary d-flex align-items-center"
+                                    onClick={handleSelectAll}
+                                >
+                                    {selectedFiles.length === uploadedFiles.length ? 'Deselect All' : 'Select All'}
+                                </button>
+                                <button
+                                    className="btn btn-danger d-flex align-items-center"
+                                    onClick={handleBulkDelete}
+                                    disabled={selectedFiles.length === 0}
+                                >
+                                    Delete Selected ({selectedFiles.length})
+                                </button>
+                            </>
+                        )}
+                    </>
+                )}
+                <button
+                    className="btn btn-outline-info d-flex align-items-center"
+                    onClick={handleIndexAll}
+                    disabled={isIndexing}
+                >
+                    {isIndexing ? (
                         <>
-                            <button
-                                className="btn btn-outline-primary d-flex align-items-center"
-                                onClick={() => setSelectMode(!selectMode)}
-                            >
-                                {selectMode ? 'Cancel' : 'Select Files'}
-                            </button>
-                            {selectMode && (
-                                <>
-                                    <button
-                                        className="btn btn-outline-secondary d-flex align-items-center"
-                                        onClick={handleSelectAll}
-                                    >
-                                        {selectedFiles.length === uploadedFiles.length ? 'Deselect All' : 'Select All'}
-                                    </button>
-                                    <button
-                                        className="btn btn-danger d-flex align-items-center"
-                                        onClick={handleBulkDelete}
-                                        disabled={selectedFiles.length === 0}
-                                    >
-                                        Delete Selected ({selectedFiles.length})
-                                    </button>
-                                </>
-                            )}
+                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            Indexing...
+                        </>
+                    ) : (
+                        <>
+                            <HiUpload className="me-2" />
+                            Index
                         </>
                     )}
-                    <button
-                        className="btn btn-primary d-flex align-items-center"
-                        onClick={handleUploadClick}
-                    >
-                        <HiUpload className="me-2" />
-                        Upload Media
-                    </button>
-                    <button
-                        className="btn btn-outline-primary d-flex align-items-center"
-                        onClick={handleShareLink}
-                    >
-                        <HiShare className="me-2" />
-                        Share Link
-                    </button>
-                </div>
+                </button>
+                <button
+                    className="btn btn-outline-info d-flex align-items-center"
+                    onClick={handleBatchProcess}
+                    disabled={isProcessing}
+                >
+                    {isProcessing ? (
+                        <>
+                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            Processing...
+                        </>
+                    ) : (
+                        <>
+                            <HiCog className="me-2" />
+                            Process Images
+                        </>
+                    )}
+                </button>
+                <button
+                    className="btn btn-primary d-flex align-items-center"
+                    onClick={handleUploadClick}
+                >
+                    <HiUpload className="me-2" />
+                    Upload
+                </button>
+                <button
+                    className="btn btn-outline-primary d-flex align-items-center"
+                    onClick={handleShareLink}
+                >
+                    <HiShare className="me-2" />
+                    Share
+                </button>
+                <button
+                    onClick={handleRecreateThumbnails}
+                    disabled={isRecreatingThumbnails}
+                    className={`px-4 py-2 rounded-lg ${isRecreatingThumbnails
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-700'
+                        } text-white`}
+                >
+                    {isRecreatingThumbnails ? 'Recreating...' : 'Recreate Thumbnails'}
+                </button>
             </div>
+
+            {/* Add processing progress alert */}
+            {processingProgress && (
+                <div className={`alert alert-${processingProgress.status === 'error' ? 'danger' : processingProgress.status === 'completed' ? 'success' : 'info'} mb-4`}>
+                    {processingProgress.message}
+                </div>
+            )}
 
             <div className="card">
                 <div className="card-body">
@@ -702,6 +1421,29 @@ export default function FolderView() {
                     )}
                 </div>
             </div>
+
+            {/* Pagination Bar */}
+            {uploadedFiles.length > 0 && (
+                <div className="d-flex justify-content-center align-items-center my-3 gap-3">
+                    <button
+                        className="btn btn-outline-secondary"
+                        onClick={handlePrevPage}
+                        disabled={currentPage === 1}
+                    >
+                        Previous
+                    </button>
+                    <span>
+                        Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                        className="btn btn-outline-secondary"
+                        onClick={handleNextPage}
+                        disabled={currentPage === totalPages}
+                    >
+                        Next
+                    </button>
+                </div>
+            )}
 
             {/* Upload Modal */}
             <div className={`modal fade ${showUploadModal ? 'show' : ''}`}
@@ -865,6 +1607,13 @@ export default function FolderView() {
                 onClose={() => setShowShareModal(false)}
                 eventId={eventId}
                 folderName={folderName}
+            />
+
+            {/* Add Face Results Modal */}
+            <FaceResultsModal
+                show={showFaceResultsModal}
+                onClose={() => setShowFaceResultsModal(false)}
+                results={selectedFileFaceResults}
             />
         </div>
     );
