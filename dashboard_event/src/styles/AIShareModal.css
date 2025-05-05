@@ -1,0 +1,107 @@
+.timeline-progress {
+    position: relative;
+    padding: 20px 0;
+}
+
+.timeline-step {
+    position: relative;
+    padding-left: 50px;
+    margin-bottom: 30px;
+}
+
+.timeline-step:last-child {
+    margin-bottom: 0;
+}
+
+.timeline-icon {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+    transition: all 0.3s ease;
+}
+
+.timeline-icon.active {
+    background-color: #0d6efd;
+}
+
+.timeline-icon .step-number {
+    color: #6c757d;
+    font-weight: 600;
+}
+
+.timeline-line {
+    position: absolute;
+    left: 20px;
+    top: 40px;
+    bottom: -30px;
+    width: 2px;
+    background-color: #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.timeline-line.active {
+    background-color: #0d6efd;
+}
+
+.timeline-content {
+    padding: 10px 0;
+}
+
+.timeline-content h6 {
+    color: #212529;
+    margin-bottom: 5px;
+}
+
+.timeline-content p {
+    font-size: 0.875rem;
+    margin-bottom: 0;
+}
+
+/* Modal specific styles */
+.modal-lg {
+    max-width: 800px;
+}
+
+.matches-section {
+    margin-top: 20px;
+}
+
+.matches-section .card {
+    transition: transform 0.2s ease;
+}
+
+.matches-section .card:hover {
+    transform: translateY(-5px);
+}
+
+.matches-section .card-img-top {
+    border-top-left-radius: calc(0.25rem - 1px);
+    border-top-right-radius: calc(0.25rem - 1px);
+}
+
+/* Loading animation */
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+.timeline-icon.active:not(.completed) {
+    animation: pulse 1.5s infinite;
+}

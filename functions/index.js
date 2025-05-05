@@ -195,7 +195,158 @@ async function searchFaces(rekognition, collectionId, imageBuffer, similarityThr
 const requiredSecrets = ["AWS_KEY", "AWS_SECRET", "AWS_REGION", "STORAGE_BUCKET"];
 
 // Main face matching function using collections
-exports.matchFacesWithCollection = matchFacesWithCollection;
+exports.matchFacesWithCollection = onRequest({
+    secrets: requiredSecrets,
+    timeoutSeconds: 300,
+    memory: '1GiB',
+    cors: true
+}, async (req, res) => {
+    cors(req, res, async () => {
+        if (req.method !== 'POST') {
+            return res.status(405).send('Method Not Allowed');
+        }
+
+        const storageBucketName = process.env.STORAGE_BUCKET;
+        const awsConfig = {
+            accessKeyId: process.env.AWS_KEY,
+            secretAccessKey: process.env.AWS_SECRET,
+            region: process.env.AWS_REGION,
+        };
+
+        const rekognition = new AWS.Rekognition(awsConfig);
+        const db = admin.firestore();
+
+        try {
+            const { selfie_url, collectionId, similarityThreshold = 80 } = req.body;
+            console.log("Received selfie matching request:", { selfie_url, collectionId, similarityThreshold });
+
+            if (!selfie_url || !collectionId) {
+                return res.status(400).json({
+                    status: 'error',
+                    error: 'Missing required fields: selfie_url or collectionId'
+                });
+            }
+
+            // Download selfie image
+            const selfieBuffer = await downloadFileAsBuffer(selfie_url);
+            console.log(`Downloaded selfie image, size: ${(selfieBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+
+            // Search for matching faces in the collection
+            const result = await rekognition.searchFacesByImage({
+                CollectionId: collectionId,
+                Image: { Bytes: selfieBuffer },
+                MaxFaces: 10, // Get top 10 matches
+                FaceMatchThreshold: similarityThreshold
+            }).promise();
+
+            console.log(`Found ${result.FaceMatches?.length || 0} matching faces`);
+            console.log('Face matches:', JSON.stringify(result.FaceMatches, null, 2));
+
+            // Process matches and get additional details from Firestore
+            const matches = await Promise.all((result.FaceMatches || []).map(async (match) => {
+                try {
+                    // Get the file document that contains this face
+                    const filesRef = db.collection('files');
+                    const q = filesRef.where('faceIds', 'array-contains', match.Face.FaceId);
+                    const querySnapshot = await q.get();
+
+                    console.log(`Searching for face ${match.Face.FaceId} in files collection`);
+                    console.log(`Found ${querySnapshot.size} matching documents`);
+
+                    if (!querySnapshot.empty) {
+                        const fileDoc = querySnapshot.docs[0];
+                        const fileData = fileDoc.data();
+
+                        console.log('Found matching file:', {
+                            path: fileData.path,
+                            name: fileData.name,
+                            similarity: match.Similarity
+                        });
+
+                        // Get the original photo path from the thumbnail path if needed
+                        const originalPhotoPath = fileData.path.includes('/thumbnails/')
+                            ? fileData.path.replace('/thumbnails/', '/photos/')
+                            : fileData.path;
+
+                        return {
+                            similarity: match.Similarity,
+                            faceId: match.Face.FaceId,
+                            confidence: match.Face.Confidence,
+                            filePath: originalPhotoPath,
+                            fileName: fileData.name,
+                            eventId: fileData.eventId,
+                            folderName: fileData.folderName,
+                            uploadedAt: fileData.uploadedAt
+                        };
+                    }
+
+                    // If no match found in faceIds, try searching in faceIndexing array
+                    const faceIndexingQ = filesRef.where('faceIndexing', 'array-contains', match.Face.FaceId);
+                    const faceIndexingSnapshot = await faceIndexingQ.get();
+
+                    console.log(`Searching for face ${match.Face.FaceId} in faceIndexing array`);
+                    console.log(`Found ${faceIndexingSnapshot.size} matching documents`);
+
+                    if (!faceIndexingSnapshot.empty) {
+                        const fileDoc = faceIndexingSnapshot.docs[0];
+                        const fileData = fileDoc.data();
+
+                        console.log('Found matching file in faceIndexing:', {
+                            path: fileData.path,
+                            name: fileData.name,
+                            similarity: match.Similarity
+                        });
+
+                        // Get the original photo path from the thumbnail path if needed
+                        const originalPhotoPath = fileData.path.includes('/thumbnails/')
+                            ? fileData.path.replace('/thumbnails/', '/photos/')
+                            : fileData.path;
+
+                        return {
+                            similarity: match.Similarity,
+                            faceId: match.Face.FaceId,
+                            confidence: match.Face.Confidence,
+                            filePath: originalPhotoPath,
+                            fileName: fileData.name,
+                            eventId: fileData.eventId,
+                            folderName: fileData.folderName,
+                            uploadedAt: fileData.uploadedAt
+                        };
+                    }
+
+                    console.log(`No file found for face ${match.Face.FaceId}`);
+                    return null;
+                } catch (error) {
+                    console.error('Error processing match:', error);
+                    return null;
+                }
+            }));
+
+            // Filter out null results and sort by similarity
+            const validMatches = matches
+                .filter(match => match !== null)
+                .sort((a, b) => b.similarity - a.similarity);
+
+            console.log(`Processed ${validMatches.length} valid matches out of ${matches.length} total matches`);
+
+            // Return results
+            return res.status(200).json({
+                status: 'completed',
+                totalMatches: validMatches.length,
+                matches: validMatches,
+                timestamp: new Date().toISOString()
+            });
+
+        } catch (error) {
+            console.error('Error in selfie matching:', error);
+            return res.status(500).json({
+                status: 'error',
+                error: error.message,
+                timestamp: new Date().toISOString()
+            });
+        }
+    });
+});
 
 // Sequential face matching function
 exports.matchFacesSequential = matchFacesSequential;
@@ -502,7 +653,9 @@ exports.batchProcessImages = onRequest({
                                 lastProcessed: new Date().toISOString(),
                                 hasFaceIndexing: true,
                                 faceDetectionStatus: faceResults !== null ? 'face_detected' : 'no_face_detected',
-                                faceCount: faceResults ? faceResults.faces.length : 0
+                                faceCount: faceResults ? faceResults.faces.length : 0,
+                                faceIds: faceResults ? faceResults.faces.map(face => face.faceId) : [],
+                                faceIndexing: faceResults ? faceResults.faces.map(face => face.faceId) : []
                             });
 
                             // Create a subcollection for face indexing results
@@ -514,7 +667,8 @@ exports.batchProcessImages = onRequest({
                                 faceIndexed: faceResults !== null,
                                 faceDetails: faceResults,
                                 processedAt: new Date().toISOString(),
-                                faceCount: faceResults ? faceResults.faces.length : 0
+                                faceCount: faceResults ? faceResults.faces.length : 0,
+                                faceIds: faceResults ? faceResults.faces.map(face => face.faceId) : []
                             });
 
                             console.log(`Updated Firestore for ${originalPhotoPath} with face detection results:`, {
@@ -731,10 +885,10 @@ exports.recreateThumbnails = onRequest({
     });
 });
 
-// Add new function for matching selfie with collection
-exports.matchSelfieWithCollection = onRequest({
+// Add new function to reprocess images for an event
+exports.reprocessEventImages = onRequest({
     secrets: requiredSecrets,
-    timeoutSeconds: 300,
+    timeoutSeconds: 540,
     memory: '1GiB',
     cors: true
 }, async (req, res) => {
@@ -752,77 +906,125 @@ exports.matchSelfieWithCollection = onRequest({
 
         const rekognition = new AWS.Rekognition(awsConfig);
         const db = admin.firestore();
+        const bucket = admin.storage().bucket(storageBucketName);
 
         try {
-            const { selfie_url, collectionId, similarityThreshold = 80 } = req.body;
-            console.log("Received selfie matching request:", { selfie_url, collectionId, similarityThreshold });
+            const { eventId, collectionId } = req.body;
+            console.log("Received reprocess request:", { eventId, collectionId });
 
-            if (!selfie_url || !collectionId) {
-                return res.status(400).json({ error: 'Missing required fields: selfie_url or collectionId' });
+            if (!eventId || !collectionId) {
+                return res.status(400).json({
+                    status: 'error',
+                    error: 'Missing required fields: eventId or collectionId'
+                });
             }
 
-            // Download selfie image
-            const selfieBuffer = await downloadFileAsBuffer(selfie_url);
-            console.log(`Downloaded selfie image, size: ${(selfieBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+            // Get all files for the event
+            const filesRef = db.collection('files');
+            const q = filesRef.where('eventId', '==', eventId);
+            const querySnapshot = await q.get();
 
-            // Search for matching faces in the collection
-            const result = await rekognition.searchFacesByImage({
-                CollectionId: collectionId,
-                Image: { Bytes: selfieBuffer },
-                MaxFaces: 10, // Get top 10 matches
-                FaceMatchThreshold: similarityThreshold
-            }).promise();
+            console.log(`Found ${querySnapshot.size} files to reprocess`);
 
-            console.log(`Found ${result.FaceMatches?.length || 0} matching faces`);
+            const results = [];
+            const errors = [];
 
-            // Process matches and get additional details from Firestore
-            const matches = await Promise.all((result.FaceMatches || []).map(async (match) => {
-                try {
-                    // Get the file document that contains this face
-                    const filesRef = collection(db, 'files');
-                    const q = query(
-                        filesRef,
-                        where('faceIndexing', 'array-contains', match.Face.FaceId)
-                    );
-                    const querySnapshot = await getDocs(q);
+            // Process files in batches
+            const batchSize = 5;
+            const files = querySnapshot.docs;
 
-                    if (!querySnapshot.empty) {
-                        const fileDoc = querySnapshot.docs[0];
-                        const fileData = fileDoc.data();
+            for (let i = 0; i < files.length; i += batchSize) {
+                const batch = files.slice(i, i + batchSize);
+                console.log(`Processing batch ${i / batchSize + 1} of ${Math.ceil(files.length / batchSize)}`);
+
+                const batchPromises = batch.map(async (doc) => {
+                    try {
+                        const fileData = doc.data();
+                        const filePath = fileData.path;
+
+                        // Convert photo path to thumbnail path
+                        const thumbnailPath = filePath.replace('/photos/', '/thumbnails/');
+                        console.log(`Processing thumbnail: ${thumbnailPath}`);
+
+                        // Download thumbnail from storage
+                        const [exists] = await bucket.file(thumbnailPath).exists();
+                        if (!exists) {
+                            console.log(`Thumbnail not found: ${thumbnailPath}`);
+                            return {
+                                success: false,
+                                file: thumbnailPath,
+                                error: 'Thumbnail not found'
+                            };
+                        }
+
+                        const fileBuffer = await downloadStorageFileAsBuffer(thumbnailPath);
+                        if (!fileBuffer) {
+                            throw new Error('Failed to download thumbnail');
+                        }
+
+                        console.log(`Downloaded thumbnail, size: ${(fileBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+
+                        // Index faces
+                        const faceResults = await indexFaces(rekognition, collectionId, fileBuffer, thumbnailPath);
+                        console.log(`Face detection results for ${thumbnailPath}:`, {
+                            hasFaces: faceResults !== null,
+                            faceCount: faceResults ? faceResults.faces.length : 0,
+                            faceIds: faceResults ? faceResults.faces.map(f => f.faceId) : []
+                        });
+
+                        // Update document with face IDs
+                        await doc.ref.update({
+                            lastProcessed: new Date().toISOString(),
+                            hasFaceIndexing: true,
+                            faceDetectionStatus: faceResults !== null ? 'face_detected' : 'no_face_detected',
+                            faceCount: faceResults ? faceResults.faces.length : 0,
+                            faceIds: faceResults ? faceResults.faces.map(face => face.faceId) : [],
+                            faceIndexing: faceResults ? faceResults.faces.map(face => face.faceId) : []
+                        });
 
                         return {
-                            similarity: match.Similarity,
-                            faceId: match.Face.FaceId,
-                            confidence: match.Face.Confidence,
-                            filePath: fileData.path,
-                            fileName: fileData.name,
-                            eventId: fileData.eventId,
-                            folderName: fileData.folderName,
-                            uploadedAt: fileData.uploadedAt
+                            success: true,
+                            file: thumbnailPath,
+                            faceCount: faceResults ? faceResults.faces.length : 0,
+                            faceIds: faceResults ? faceResults.faces.map(f => f.faceId) : []
+                        };
+                    } catch (error) {
+                        console.error(`Error processing ${doc.id}:`, error);
+                        return {
+                            success: false,
+                            file: doc.id,
+                            error: error.message
                         };
                     }
-                    return null;
-                } catch (error) {
-                    console.error('Error processing match:', error);
-                    return null;
+                });
+
+                const batchResults = await Promise.all(batchPromises);
+                batchResults.forEach(result => {
+                    if (result.success) {
+                        results.push(result);
+                    } else {
+                        errors.push(result);
+                    }
+                });
+
+                // Add delay between batches
+                if (i + batchSize < files.length) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                 }
-            }));
+            }
 
-            // Filter out null results and sort by similarity
-            const validMatches = matches
-                .filter(match => match !== null)
-                .sort((a, b) => b.similarity - a.similarity);
-
-            // Return results
             return res.status(200).json({
                 status: 'completed',
-                totalMatches: validMatches.length,
-                matches: validMatches,
+                totalFiles: files.length,
+                processedFiles: results.length,
+                failedFiles: errors.length,
+                results: results,
+                errors: errors,
                 timestamp: new Date().toISOString()
             });
 
         } catch (error) {
-            console.error('Error in selfie matching:', error);
+            console.error('Error in reprocessing:', error);
             return res.status(500).json({
                 status: 'error',
                 error: error.message,

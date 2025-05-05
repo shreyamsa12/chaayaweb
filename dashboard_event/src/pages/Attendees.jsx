@@ -5,17 +5,26 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { HiCalendar, HiLocationMarker, HiUsers, HiMail, HiPhone } from 'react-icons/hi';
 import { ref, listAll } from 'firebase/storage';
 import { httpsCallable } from 'firebase/functions';
+import AIShareModal from '../components/AIShareModal';
+import '../styles/AIShareModal.css';
+
+const CLOUD_FUNCTION_URL = 'https://us-central1-photoshoto-a7226.cloudfunctions.net';
 
 const Attendees = () => {
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [user] = useAuthState(auth);
+    const [showAIShareModal, setShowAIShareModal] = useState(false);
+    const [selectedAttendee, setSelectedAttendee] = useState(null);
+    const [selectedEvent, setSelectedEvent] = useState(null);
 
     useEffect(() => {
         const fetchEventsAndAttendees = async () => {
             if (!user) return;
 
             try {
+                setError(null);
                 // First fetch all events for this host
                 const eventsRef = collection(db, 'events');
                 const eventsQuery = query(eventsRef, where('event_host', '==', user.uid));
@@ -30,27 +39,45 @@ const Attendees = () => {
                 // For each event, fetch its attendees from eventsregistry
                 const eventsWithAttendees = await Promise.all(
                     eventsData.map(async (event) => {
-                        const registryRef = collection(db, 'eventsregistry');
-                        const registryQuery = query(registryRef, where('eventId', '==', event.id));
-                        const registrySnapshot = await getDocs(registryQuery);
+                        try {
+                            const registryRef = collection(db, 'eventsregistry');
+                            const registryQuery = query(registryRef, where('eventId', '==', event.id));
+                            const registrySnapshot = await getDocs(registryQuery);
 
-                        const attendees = registrySnapshot.docs.map(doc => ({
-                            id: doc.id,
-                            ...doc.data(),
-                            registrationDate: doc.data().timestamp // Using timestamp as registration date
-                        }));
+                            const attendees = registrySnapshot.docs.map(doc => {
+                                const data = doc.data();
+                                console.log('Attendee data:', {
+                                    id: doc.id,
+                                    name: data.name,
+                                    selfieUrl: data.selfieUrl,
+                                    rawData: data
+                                });
+                                return {
+                                    id: doc.id,
+                                    ...data,
+                                    registrationDate: data.timestamp || new Date()
+                                };
+                            });
 
-                        return {
-                            ...event,
-                            attendees
-                        };
+                            return {
+                                ...event,
+                                attendees
+                            };
+                        } catch (error) {
+                            console.error(`Error fetching attendees for event ${event.id}:`, error);
+                            return {
+                                ...event,
+                                attendees: []
+                            };
+                        }
                     })
                 );
 
-                console.log('Events with attendees:', eventsWithAttendees); // Debug log
+                console.log('Events with attendees:', eventsWithAttendees);
                 setEvents(eventsWithAttendees);
             } catch (error) {
                 console.error('Error fetching events and attendees:', error);
+                setError('Failed to load events and attendees. Please try again later.');
             } finally {
                 setLoading(false);
             }
@@ -59,12 +86,92 @@ const Attendees = () => {
         fetchEventsAndAttendees();
     }, [user]);
 
+    const handleAIShare = async (attendee, eventId) => {
+        if (!attendee?.id || !eventId) {
+            setError('Invalid attendee or event data');
+            return;
+        }
+
+        try {
+            setError(null);
+            const attendeeRef = doc(db, 'eventsregistry', attendee.id);
+
+            if (!attendee.selfieUrl) {
+                setError('No selfie found for this attendee');
+                return;
+            }
+
+            // Update attendee's document to show processing status
+            await updateDoc(attendeeRef, {
+                matchStatus: 'processing',
+                lastMatchAttempt: new Date().toISOString()
+            });
+
+            // Get the collection ID for this event
+            const eventRef = doc(db, 'events', eventId);
+            const eventDoc = await getDoc(eventRef);
+
+            if (!eventDoc.exists()) {
+                throw new Error('Event not found');
+            }
+
+            // Check if we need to create a collection ID
+            let collectionId = eventDoc.data()?.collectionId;
+            if (!collectionId) {
+                collectionId = `${eventId}_groupphotos`;
+                await updateDoc(eventRef, { collectionId });
+            }
+
+            // Call the cloud function to match faces
+            const response = await fetch(`${CLOUD_FUNCTION_URL}/matchFacesWithCollection`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    selfie_url: attendee.selfieUrl,
+                    collectionId: collectionId,
+                    similarityThreshold: 80
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to match faces');
+            }
+
+            const result = await response.json();
+            console.log('Match results:', result);
+
+            // Update attendee's document with results
+            await updateDoc(attendeeRef, {
+                matchStatus: 'completed',
+                lastMatchAttempt: new Date().toISOString(),
+                aiMatches: result.matches,
+                totalMatches: result.matches.length
+            });
+
+            return result;
+        } catch (error) {
+            console.error('Error in handleAIShare:', error);
+            setError(error.message || 'Failed to process AI share request');
+            throw error;
+        }
+    };
+
     if (loading) {
         return (
             <div className="d-flex justify-content-center align-items-center h-100">
                 <div className="spinner-border text-primary" role="status">
                     <span className="visually-hidden">Loading...</span>
                 </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="alert alert-danger m-3" role="alert">
+                {error}
             </div>
         );
     }
@@ -96,12 +203,12 @@ const Attendees = () => {
                                     <div className="d-flex align-items-center mb-2">
                                         <HiCalendar className="me-2" />
                                         <span>
-                                            {new Date(event.date.toDate()).toLocaleDateString()}
+                                            {event.date?.toDate ? new Date(event.date.toDate()).toLocaleDateString() : 'Date not available'}
                                         </span>
                                     </div>
                                     <div className="d-flex align-items-center">
                                         <HiLocationMarker className="me-2" />
-                                        <span>{event.event_location_name}</span>
+                                        <span>{event.event_location_name || 'Location not available'}</span>
                                     </div>
                                 </div>
 
@@ -121,109 +228,57 @@ const Attendees = () => {
                                             </thead>
                                             <tbody>
                                                 {event.attendees.map((attendee, index) => (
-                                                    <tr key={index}>
+                                                    <tr key={attendee.id || index}>
                                                         <td>
-                                                            <img
-                                                                src={attendee.selfieUrl}
-                                                                alt={`${attendee.name}'s selfie`}
-                                                                className="attendee-selfie rounded"
-                                                                style={{
-                                                                    width: '50px',
-                                                                    height: '50px',
-                                                                    objectFit: 'cover',
-                                                                    cursor: 'pointer'
-                                                                }}
-                                                                onClick={() => window.open(attendee.selfieUrl, '_blank')}
-                                                            />
+                                                            {attendee.selfieUrl ? (
+                                                                <img
+                                                                    src={attendee.selfieUrl}
+                                                                    alt={`${attendee.name || 'Attendee'}'s selfie`}
+                                                                    className="img-thumbnail"
+                                                                    style={{ width: '50px', height: '50px', objectFit: 'cover' }}
+                                                                    onError={(e) => {
+                                                                        console.error('Failed to load image:', {
+                                                                            attendeeId: attendee.id,
+                                                                            attendeeName: attendee.name,
+                                                                            selfieUrl: attendee.selfieUrl,
+                                                                            eventId: event.id
+                                                                        });
+                                                                        e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiNFNUU1RTUiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzY2NiIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTIiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+                                                                    }}
+                                                                    onLoad={(e) => {
+                                                                        console.log('Successfully loaded image:', {
+                                                                            attendeeId: attendee.id,
+                                                                            attendeeName: attendee.name,
+                                                                            selfieUrl: attendee.selfieUrl,
+                                                                            eventId: event.id
+                                                                        });
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                <div className="img-thumbnail d-flex align-items-center justify-content-center bg-light" style={{ width: '50px', height: '50px' }}>
+                                                                    <HiUsers className="text-muted" />
+                                                                </div>
+                                                            )}
                                                         </td>
-                                                        <td>{attendee.name}</td>
+                                                        <td>{attendee.name || 'N/A'}</td>
+                                                        <td>{attendee.phone || 'N/A'}</td>
                                                         <td>
-                                                            <div className="d-flex align-items-center">
-                                                                <HiPhone className="me-2" />
-                                                                {attendee.phone}
-                                                            </div>
+                                                            {attendee.registrationDate?.toDate
+                                                                ? new Date(attendee.registrationDate.toDate()).toLocaleDateString()
+                                                                : 'N/A'}
                                                         </td>
-                                                        <td>
-                                                            {new Date(attendee.timestamp).toLocaleString()}
-                                                        </td>
-                                                        <td>
-                                                            <span className={`badge ${attendee.verified ? 'bg-success' : 'bg-warning'}`}>
-                                                                {attendee.verified ? 'Verified' : 'Pending'}
-                                                            </span>
-                                                        </td>
+                                                        <td>{attendee.matchStatus || 'Not processed'}</td>
                                                         <td>
                                                             <button
-                                                                onClick={async () => {
-                                                                    const selfieUrl = attendee.selfieUrl;
-                                                                    const eventId = event.id;
-                                                                    const registryId = attendee.uid;
-
-                                                                    if (!registryId) {
-                                                                        console.error('No registry ID found for attendee:', attendee);
-                                                                        alert('Error: Could not find attendee registry. Please try again.');
-                                                                        return;
-                                                                    }
-
-                                                                    try {
-                                                                        // Fetch event data using eventId
-                                                                        const eventDoc = await getDoc(doc(db, 'events', eventId));
-                                                                        if (!eventDoc.exists()) {
-                                                                            throw new Error('Event not found');
-                                                                        }
-
-                                                                        const eventData = eventDoc.data();
-                                                                        const folders = eventData.folders || [];
-
-                                                                        if (!folders || folders.length === 0) {
-                                                                            throw new Error('No folders found in the event data');
-                                                                        }
-
-                                                                        // Construct folder paths for the request
-                                                                        const folderPaths = folders.map(folder => {
-                                                                            // Remove any leading/trailing slashes and ensure proper format
-                                                                            const cleanFolder = folder.replace(/^\/+|\/+$/g, '');
-                                                                            // Construct the full path as expected by the cloud function
-                                                                            return `users/${user.uid}/event_folders/${event.event_name}/${cleanFolder}/thumbnails`.replace(/\/+/g, '/');
-                                                                        });
-
-                                                                        // Log request parameters with more details
-                                                                        console.log('Request parameters:', {
-                                                                            selfie_url: selfieUrl,
-                                                                            folder_paths: folderPaths,
-                                                                            eventsregistryId: registryId,
-                                                                            event_name: event.event_name,
-                                                                            folders_count: folders.length,
-                                                                            user_id: user.uid
-                                                                        });
-
-                                                                        // Create the callable function
-                                                                        const matchFacesSequential = httpsCallable(functions, 'matchFacesSequential');
-
-                                                                        // Call the function
-                                                                        const result = await matchFacesSequential({
-                                                                            selfie_url: selfieUrl,
-                                                                            folder_paths: folderPaths,
-                                                                            eventsregistryId: registryId
-                                                                        });
-
-                                                                        console.log('AI Share result:', result.data);
-
-                                                                        // Update the attendee's document with the match status
-                                                                        await updateDoc(doc(db, 'eventsregistry', registryId), {
-                                                                            matchStatus: 'processing',
-                                                                            lastMatchAttempt: new Date().toISOString()
-                                                                        });
-
-                                                                        alert('AI Share process started successfully! Check the matches view for results.');
-                                                                    } catch (error) {
-                                                                        console.error('Error in AI Share:', error);
-                                                                        // Show more detailed error message
-                                                                        alert(`Error starting AI Share process: ${error.message}\n\nPlease check the console for more details.`);
-                                                                    }
+                                                                className="btn btn-primary"
+                                                                onClick={() => {
+                                                                    setSelectedAttendee(attendee);
+                                                                    setSelectedEvent(event.id);
+                                                                    setShowAIShareModal(true);
                                                                 }}
-                                                                className="btn btn-primary btn-sm"
+                                                                disabled={!attendee.selfieUrl}
                                                             >
-                                                                AI Share
+                                                                Share
                                                             </button>
                                                         </td>
                                                     </tr>
@@ -241,6 +296,15 @@ const Attendees = () => {
                     </div>
                 ))}
             </div>
+            {showAIShareModal && selectedAttendee && selectedEvent && (
+                <AIShareModal
+                    show={showAIShareModal}
+                    onClose={() => setShowAIShareModal(false)}
+                    onShare={handleAIShare}
+                    attendee={selectedAttendee}
+                    eventId={selectedEvent}
+                />
+            )}
         </div>
     );
 };
