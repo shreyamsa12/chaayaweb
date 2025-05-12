@@ -4,10 +4,13 @@ const { onRequest, onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 const axios = require('axios');
 const AWS = require('aws-sdk');
-const cors = require('cors')({ origin: true });
+const cors = require('cors')({
+    origin: ['https://chaaya.ai', 'http://localhost:3000', 'http://localhost:5173'],
+    methods: ['POST', 'OPTIONS'],
+    credentials: true
+});
 const functions = require('firebase-functions');
 const { httpsCallable } = require('firebase-functions/v2');
-const { matchFacesWithCollection } = require('./matchFacesWithCollection');
 const { matchFacesSequential } = require('./matchFacesSequential');
 const sharp = require('sharp');
 const { collection, query, where, getDocs } = require('firebase-admin/firestore');
@@ -199,153 +202,152 @@ exports.matchFacesWithCollection = onRequest({
     secrets: requiredSecrets,
     timeoutSeconds: 300,
     memory: '1GiB',
-    cors: true
+    cors: ['https://chaaya.ai', 'http://localhost:3000', 'http://localhost:5173'],
+    invoker: 'public'
 }, async (req, res) => {
-    cors(req, res, async () => {
-        if (req.method !== 'POST') {
-            return res.status(405).send('Method Not Allowed');
-        }
+    if (req.method !== 'POST') {
+        return res.status(405).send('Method Not Allowed');
+    }
 
-        const storageBucketName = process.env.STORAGE_BUCKET;
-        const awsConfig = {
-            accessKeyId: process.env.AWS_KEY,
-            secretAccessKey: process.env.AWS_SECRET,
-            region: process.env.AWS_REGION,
-        };
+    const storageBucketName = process.env.STORAGE_BUCKET;
+    const awsConfig = {
+        accessKeyId: process.env.AWS_KEY,
+        secretAccessKey: process.env.AWS_SECRET,
+        region: process.env.AWS_REGION,
+    };
 
-        const rekognition = new AWS.Rekognition(awsConfig);
-        const db = admin.firestore();
+    const rekognition = new AWS.Rekognition(awsConfig);
+    const db = admin.firestore();
 
-        try {
-            const { selfie_url, collectionId, similarityThreshold = 80 } = req.body;
-            console.log("Received selfie matching request:", { selfie_url, collectionId, similarityThreshold });
+    try {
+        const { selfie_url, collectionId, similarityThreshold = 80 } = req.body;
+        console.log("Received selfie matching request:", { selfie_url, collectionId, similarityThreshold });
 
-            if (!selfie_url || !collectionId) {
-                return res.status(400).json({
-                    status: 'error',
-                    error: 'Missing required fields: selfie_url or collectionId'
-                });
-            }
-
-            // Download selfie image
-            const selfieBuffer = await downloadFileAsBuffer(selfie_url);
-            console.log(`Downloaded selfie image, size: ${(selfieBuffer.length / 1024 / 1024).toFixed(2)}MB`);
-
-            // Search for matching faces in the collection
-            const result = await rekognition.searchFacesByImage({
-                CollectionId: collectionId,
-                Image: { Bytes: selfieBuffer },
-                MaxFaces: 10, // Get top 10 matches
-                FaceMatchThreshold: similarityThreshold
-            }).promise();
-
-            console.log(`Found ${result.FaceMatches?.length || 0} matching faces`);
-            console.log('Face matches:', JSON.stringify(result.FaceMatches, null, 2));
-
-            // Process matches and get additional details from Firestore
-            const matches = await Promise.all((result.FaceMatches || []).map(async (match) => {
-                try {
-                    // Get the file document that contains this face
-                    const filesRef = db.collection('files');
-                    const q = filesRef.where('faceIds', 'array-contains', match.Face.FaceId);
-                    const querySnapshot = await q.get();
-
-                    console.log(`Searching for face ${match.Face.FaceId} in files collection`);
-                    console.log(`Found ${querySnapshot.size} matching documents`);
-
-                    if (!querySnapshot.empty) {
-                        const fileDoc = querySnapshot.docs[0];
-                        const fileData = fileDoc.data();
-
-                        console.log('Found matching file:', {
-                            path: fileData.path,
-                            name: fileData.name,
-                            similarity: match.Similarity
-                        });
-
-                        // Get the original photo path from the thumbnail path if needed
-                        const originalPhotoPath = fileData.path.includes('/thumbnails/')
-                            ? fileData.path.replace('/thumbnails/', '/photos/')
-                            : fileData.path;
-
-                        return {
-                            similarity: match.Similarity,
-                            faceId: match.Face.FaceId,
-                            confidence: match.Face.Confidence,
-                            filePath: originalPhotoPath,
-                            fileName: fileData.name,
-                            eventId: fileData.eventId,
-                            folderName: fileData.folderName,
-                            uploadedAt: fileData.uploadedAt
-                        };
-                    }
-
-                    // If no match found in faceIds, try searching in faceIndexing array
-                    const faceIndexingQ = filesRef.where('faceIndexing', 'array-contains', match.Face.FaceId);
-                    const faceIndexingSnapshot = await faceIndexingQ.get();
-
-                    console.log(`Searching for face ${match.Face.FaceId} in faceIndexing array`);
-                    console.log(`Found ${faceIndexingSnapshot.size} matching documents`);
-
-                    if (!faceIndexingSnapshot.empty) {
-                        const fileDoc = faceIndexingSnapshot.docs[0];
-                        const fileData = fileDoc.data();
-
-                        console.log('Found matching file in faceIndexing:', {
-                            path: fileData.path,
-                            name: fileData.name,
-                            similarity: match.Similarity
-                        });
-
-                        // Get the original photo path from the thumbnail path if needed
-                        const originalPhotoPath = fileData.path.includes('/thumbnails/')
-                            ? fileData.path.replace('/thumbnails/', '/photos/')
-                            : fileData.path;
-
-                        return {
-                            similarity: match.Similarity,
-                            faceId: match.Face.FaceId,
-                            confidence: match.Face.Confidence,
-                            filePath: originalPhotoPath,
-                            fileName: fileData.name,
-                            eventId: fileData.eventId,
-                            folderName: fileData.folderName,
-                            uploadedAt: fileData.uploadedAt
-                        };
-                    }
-
-                    console.log(`No file found for face ${match.Face.FaceId}`);
-                    return null;
-                } catch (error) {
-                    console.error('Error processing match:', error);
-                    return null;
-                }
-            }));
-
-            // Filter out null results and sort by similarity
-            const validMatches = matches
-                .filter(match => match !== null)
-                .sort((a, b) => b.similarity - a.similarity);
-
-            console.log(`Processed ${validMatches.length} valid matches out of ${matches.length} total matches`);
-
-            // Return results
-            return res.status(200).json({
-                status: 'completed',
-                totalMatches: validMatches.length,
-                matches: validMatches,
-                timestamp: new Date().toISOString()
-            });
-
-        } catch (error) {
-            console.error('Error in selfie matching:', error);
-            return res.status(500).json({
+        if (!selfie_url || !collectionId) {
+            return res.status(400).json({
                 status: 'error',
-                error: error.message,
-                timestamp: new Date().toISOString()
+                error: 'Missing required fields: selfie_url or collectionId'
             });
         }
-    });
+
+        // Download selfie image
+        const selfieBuffer = await downloadFileAsBuffer(selfie_url);
+        console.log(`Downloaded selfie image, size: ${(selfieBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+
+        // Search for matching faces in the collection
+        const result = await rekognition.searchFacesByImage({
+            CollectionId: collectionId,
+            Image: { Bytes: selfieBuffer },
+            MaxFaces: 10, // Get top 10 matches
+            FaceMatchThreshold: similarityThreshold
+        }).promise();
+
+        console.log(`Found ${result.FaceMatches?.length || 0} matching faces`);
+        console.log('Face matches:', JSON.stringify(result.FaceMatches, null, 2));
+
+        // Process matches and get additional details from Firestore
+        const matches = await Promise.all((result.FaceMatches || []).map(async (match) => {
+            try {
+                // Get the file document that contains this face
+                const filesRef = db.collection('files');
+                const q = filesRef.where('faceIds', 'array-contains', match.Face.FaceId);
+                const querySnapshot = await q.get();
+
+                console.log(`Searching for face ${match.Face.FaceId} in files collection`);
+                console.log(`Found ${querySnapshot.size} matching documents`);
+
+                if (!querySnapshot.empty) {
+                    const fileDoc = querySnapshot.docs[0];
+                    const fileData = fileDoc.data();
+
+                    console.log('Found matching file:', {
+                        path: fileData.path,
+                        name: fileData.name,
+                        similarity: match.Similarity
+                    });
+
+                    // Get the original photo path from the thumbnail path if needed
+                    const originalPhotoPath = fileData.path.includes('/thumbnails/')
+                        ? fileData.path.replace('/thumbnails/', '/photos/')
+                        : fileData.path;
+
+                    return {
+                        similarity: match.Similarity,
+                        faceId: match.Face.FaceId,
+                        confidence: match.Face.Confidence,
+                        filePath: originalPhotoPath,
+                        fileName: fileData.name,
+                        eventId: fileData.eventId,
+                        folderName: fileData.folderName,
+                        uploadedAt: fileData.uploadedAt
+                    };
+                }
+
+                // If no match found in faceIds, try searching in faceIndexing array
+                const faceIndexingQ = filesRef.where('faceIndexing', 'array-contains', match.Face.FaceId);
+                const faceIndexingSnapshot = await faceIndexingQ.get();
+
+                console.log(`Searching for face ${match.Face.FaceId} in faceIndexing array`);
+                console.log(`Found ${faceIndexingSnapshot.size} matching documents`);
+
+                if (!faceIndexingSnapshot.empty) {
+                    const fileDoc = faceIndexingSnapshot.docs[0];
+                    const fileData = fileDoc.data();
+
+                    console.log('Found matching file in faceIndexing:', {
+                        path: fileData.path,
+                        name: fileData.name,
+                        similarity: match.Similarity
+                    });
+
+                    // Get the original photo path from the thumbnail path if needed
+                    const originalPhotoPath = fileData.path.includes('/thumbnails/')
+                        ? fileData.path.replace('/thumbnails/', '/photos/')
+                        : fileData.path;
+
+                    return {
+                        similarity: match.Similarity,
+                        faceId: match.Face.FaceId,
+                        confidence: match.Face.Confidence,
+                        filePath: originalPhotoPath,
+                        fileName: fileData.name,
+                        eventId: fileData.eventId,
+                        folderName: fileData.folderName,
+                        uploadedAt: fileData.uploadedAt
+                    };
+                }
+
+                console.log(`No file found for face ${match.Face.FaceId}`);
+                return null;
+            } catch (error) {
+                console.error('Error processing match:', error);
+                return null;
+            }
+        }));
+
+        // Filter out null results and sort by similarity
+        const validMatches = matches
+            .filter(match => match !== null)
+            .sort((a, b) => b.similarity - a.similarity);
+
+        console.log(`Processed ${validMatches.length} valid matches out of ${matches.length} total matches`);
+
+        // Return results
+        return res.status(200).json({
+            status: 'completed',
+            totalMatches: validMatches.length,
+            matches: validMatches,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        console.error('Error in selfie matching:', error);
+        return res.status(500).json({
+            status: 'error',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 // Sequential face matching function
